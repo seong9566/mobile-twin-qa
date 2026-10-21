@@ -1,0 +1,30 @@
+# <company|personal>/<project>/project.yaml — 공유 설정 (기기별 값은 project.local.yaml)
+name: <repo 이름과 동일>
+category: personal            # personal | company
+repo: https://github.com/<owner>/<repo>.git
+branch: main                  # 계획을 쓸 때 기준으로 삼는 브랜치
+
+apps:
+  android:
+    package: <applicationId>
+    launch: <package>/.MainActivity
+  ios:
+    bundle_id: <PRODUCT_BUNDLE_IDENTIFIER>
+
+build:                        # 소스 루트 기준 명령
+  android: <예: flutter build apk --debug --dart-define-from-file=.env>
+  android_apk: <빌드 산출물 경로>
+  ios: <예: xcodebuild ... / flutter build ios --simulator>
+
+environments:                 # 이름만. 실제 주소가 비밀이면 .env 키 이름을 적는다
+  default: dev
+
+accounts:                     # 역할 → .env 키 이름 (값은 .env에만)
+  # field_worker: { id_env: TEST_USER_ID, password_env: TEST_USER_PASSWORD }
+
+docs:                         # 계획 작성 때 읽을 소스 안 문서 (소스 루트 기준)
+  - README.md
+
+runners:
+  android: artemis            # artemis | mobile-mcp
+  ios: mobile-mcp

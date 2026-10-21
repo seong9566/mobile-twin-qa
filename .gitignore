@@ -1,0 +1,18 @@
+# 회사 프로젝트는 git에 올리지 않는다
+/company/*
+!/company/README.md
+
+# 받아 둔 소스
+/.cache/
+
+# 기기별 설정·비밀값
+project.local.yaml
+!/templates/project.local.yaml
+.env
+.env.*
+!.env.example
+
+# 실행 원본 결과물
+**/runs/**/artifacts/
+
+.DS_Store

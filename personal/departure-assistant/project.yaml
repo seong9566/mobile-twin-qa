@@ -1,0 +1,31 @@
+name: departure-assistant
+category: personal
+repo: https://github.com/seong9566/departure-assistant.git
+branch: main
+
+apps:
+  android:
+    package: com.hyeonseong.departureassistant   # app/android/app/build.gradle.kts:22
+    launch: com.hyeonseong.departureassistant/.MainActivity   # app/android/app/src/main/AndroidManifest.xml:48
+  ios:
+    bundle_id: com.stec.deptest   # ios/DepartureAssistant.xcodeproj/project.pbxproj:309 (네이티브 SwiftUI)
+
+build:
+  android: cd app && flutter build apk --dart-define-from-file=.env
+  android_apk: app/build/app/outputs/flutter-apk/app-release.apk
+  ios: cd ios && xcodebuild build -scheme DepartureAssistant -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO
+
+environments:
+  default: local      # server/run.sh --urls http://0.0.0.0:5199, 앱 .env의 API_BASE_URL
+
+accounts: {}          # 계정 없음 — 기기 등록 방식
+
+docs:
+  - CLAUDE.md
+  - STATUS.md         # 실기기 검증 대기 체크리스트
+  - ARCHITECTURE.md
+  - docs/adr/
+
+runners:
+  android: artemis
+  ios: mobile-mcp
