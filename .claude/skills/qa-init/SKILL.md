@@ -5,6 +5,8 @@ description: Use when registering a new app project in mobile-twin-qa — the us
 
 # qa-init — 프로젝트 등록
 
+작업 위치(메인 작업 트리)와 커밋은 AGENTS.md "작업 위치와 커밋"을 따른다.
+
 원본 repo를 읽어 `<company|personal>/<project>/`의 설정과 지식 파일을 만든다. 계획은 쓰지 않는다 — 등록이 끝나면 `qa-plan`으로 넘어간다고 안내한다.
 
 ## 1. 입력 확정
@@ -42,4 +44,4 @@ description: Use when registering a new app project in mobile-twin-qa — the us
 
 ## 5. 보고
 
-만든 파일 경로 · `# 미확인`으로 남긴 칸 · 원본 repo 쪽 후속 작업 후보 · 다음 단계(`qa-plan`으로 계획 쓰기, 범위·플랫폼 질문)를 알린다.
+만든 파일 경로 · `# 미확인`으로 남긴 칸 · 원본 repo 쪽 후속 작업 후보 · 다음 단계(`qa-plan`으로 계획 쓰기, 범위·플랫폼 질문)를 알린다. 개인 프로젝트면 커밋할지 묻는다.

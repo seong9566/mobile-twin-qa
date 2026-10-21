@@ -5,6 +5,9 @@
 # 받아 둔 소스
 /.cache/
 
+# 규칙 수정용 워크트리
+/.claude/worktrees/
+
 # 기기별 설정·비밀값
 project.local.yaml
 !/templates/project.local.yaml
