@@ -22,7 +22,7 @@ description: Use when running scenarios from a mobile-twin-qa test plan on a dev
 - 실행 폴더: `runs/<plan 파일명(확장자 제외)>/<yyyy-mm-dd-HHmm>/` — 첫 시나리오를 보내기 직전에 만든다. 같은 이름이 이미 있으면 1분 뒤 시각으로 다시 정한다.
 - 시나리오를 **하나씩** 보낸다(Artemis는 `POST /api/run`에 계획의 실행 옵션과 `device_serial`). 끝날 때까지 `GET /api/sessions/{id}`로 상태를 본다.
 - B 등급은 사람이 할 동작이 화면에 나올 시점을 사용자에게 미리 알린다.
-- 시나리오마다 `checks`·`usage` 원본과 녹화를 `artifacts/<ID>/`에 받고(`tools/artemis.md` 예시), `summary.md`에는 요약만 적는다. 녹화를 받지 못했으면 근거 칸에 "녹화 없음"을 적는다.
+- 시나리오마다 녹화를 `artifacts/<ID>/`에 받고, Artemis면 `checks`·`usage` 원본도 같은 곳에 받는다(`tools/artemis.md` 예시), `summary.md`에는 요약만 적는다. 녹화를 받지 못했으면 근거 칸에 "녹화 없음"을 적는다.
 - 앞 시나리오 결과가 뒤 시나리오의 사전 조건이면, 앞이 실패했을 때 뒤는 보내지 않고 "보류"로 적는다.
 
 ## 3. summary.md

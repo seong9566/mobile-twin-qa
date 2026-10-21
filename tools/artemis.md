@@ -5,9 +5,8 @@ Artemis 설치 위치는 기기마다 다르므로 `ARTEMIS_HOME` 환경 변수�
 ## 서버
 
 ```bash
-cd "$ARTEMIS_HOME"
-uv run artemis ui --port 8100      # 8000은 다른 서비스가 쓴다 — 8000으로 띄우지 않는다
-uv run artemis doctor              # 기기·키 점검
+(cd "$ARTEMIS_HOME" && uv run artemis ui --port 8100)   # 서브셸 — 현재 폴더를 바꾸지 않는다. 8000은 다른 서비스가 쓴다
+(cd "$ARTEMIS_HOME" && uv run artemis doctor)           # 기기·키 점검
 ```
 
 - 휴대폰은 잠금 해제·홈 화면 상태여야 한다(잠겨 있으면 `POST /api/run`이 409).
@@ -28,7 +27,7 @@ SID=$(curl -s -X POST "$BASE/api/run" -H 'Content-Type: application/json' -d '{
 }' | jq -r '.tasks[0].session_id')
 
 curl -s "$BASE/api/sessions/$SID"          # status: completed | failed | cancelled
-RUN=<project 폴더>/runs/<plan 파일명(확장자 제외)>/<yyyy-mm-dd-HHmm>   # qa-run의 실행 폴더
+RUN="$(git -C <mobile-twin-qa 경로> rev-parse --show-toplevel)/<category>/<project>/runs/<plan 파일명(확장자 제외)>/<yyyy-mm-dd-HHmm>"   # 절대 경로 — qa-run의 실행 폴더
 mkdir -p "$RUN/artifacts/<ID>"
 curl -sSf -o "$RUN/artifacts/<ID>/checks.json" "$BASE/api/sessions/$SID/checks"   # 원본 저장, summary.md에는 요약만
 curl -sSf -o "$RUN/artifacts/<ID>/usage.json"  "$BASE/api/sessions/$SID/usage"
