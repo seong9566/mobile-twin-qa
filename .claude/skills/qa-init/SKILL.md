@@ -44,4 +44,4 @@ description: Use when registering a new app project in mobile-twin-qa — the us
 
 ## 5. 보고
 
-만든 파일 경로 · `# 미확인`으로 남긴 칸 · 원본 repo 쪽 후속 작업 후보 · 다음 단계(`qa-plan`으로 계획 쓰기, 범위·플랫폼 질문)를 알린다.
+만든 파일 경로 · `# 미확인`으로 남긴 칸 · 원본 repo 쪽 후속 작업 후보 · 다음 단계(`qa-plan`으로 계획 쓰기, 범위·플랫폼 질문)를 알린다. 개인 프로젝트면 커밋할지 묻는다.
