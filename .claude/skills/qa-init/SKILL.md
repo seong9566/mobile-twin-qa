@@ -16,7 +16,7 @@ description: Use when registering a new app project in mobile-twin-qa — the us
 ## 2. 소스 확보
 
 1. 로컬 경로를 받았으면 그 경로를 `project.local.yaml`의 `source_path`로 쓴다.
-2. URL만 받았으면 `git clone --depth 50 --no-single-branch <url> .cache/repos/<project>`. 이미 있으면 기본 브랜치 `<b>`로 맞춘다: `git -C .cache/repos/<project> fetch --depth 50 origin <b>` → `git -C .cache/repos/<project> checkout -B <b> FETCH_HEAD`. `source_path`는 비운 채로 둔다.
+2. URL만 받았으면 `git clone --depth 50 --no-single-branch <url> .cache/repos/<project>`. 기본 브랜치 `<b>`는 `git -C .cache/repos/<project> symbolic-ref --short refs/remotes/origin/HEAD`에서 `origin/`을 뗀 값이고, `project.yaml`의 `branch`에 적는다. 이미 있으면 `<b>`로 맞춘다: `git -C .cache/repos/<project> fetch --depth 50 origin <b>` → `git -C .cache/repos/<project> checkout -B <b> FETCH_HEAD`. `source_path`는 비운 채로 둔다.
 3. 짧은 SHA를 적어 둔다: `git -C <소스> rev-parse --short HEAD`.
 
 ## 3. 소스에서 읽을 것

@@ -13,7 +13,7 @@ description: Use when writing or refreshing a test plan for a project registered
 
 ## 2. 소스 맞추기
 
-1. 소스 위치: `project.local.yaml`의 `source_path` → 없으면 `.cache/repos/<project>`(없으면 `project.yaml`의 `repo`를 받는다).
+1. 소스 위치: `project.local.yaml`의 `source_path` → 없으면 `.cache/repos/<project>`(없으면 `qa-init`의 소스 확보와 같은 명령으로 `project.yaml`의 `repo`를 받는다).
 2. `.cache` 소스는 `project.yaml`의 `branch`(`<b>`)로 맞춘다: `git -C <소스> fetch --depth 50 origin <b>` → `git -C <소스> checkout -B <b> FETCH_HEAD`. `source_path`는 사용자 작업 트리이므로 브랜치를 바꾸지 않고 현재 상태를 읽는다.
 3. 기록할 값: 브랜치 · `git rev-parse --short HEAD` · 앱 버전(pubspec·gradle·Info.plist 등) · 커밋하지 않은 변경 여부(`git status --porcelain`이 비어 있지 않으면 `dirty: true`).
 

@@ -1,5 +1,5 @@
 # <company|personal>/<project>/project.local.yaml — 이 기기 전용 (git 제외)
 source_path:            # 예: /Users/me/work/<repo> — 비우면 .cache/repos/<project>를 쓴다
 devices:
-  android: <adb serial>                 # adb devices -l
-  ios: <simulator 이름 또는 UDID>
+  android:                # adb serial — adb devices -l
+  ios:                    # simulator 이름 또는 UDID — xcrun simctl list devices booted
