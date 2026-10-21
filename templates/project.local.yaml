@@ -1,0 +1,5 @@
+# <company|personal>/<project>/project.local.yaml — 이 기기 전용 (git 제외)
+source_path: /absolute/path/to/<repo>   # 비우면 .cache/repos/<project>에 repo를 받는다
+devices:
+  android: <adb serial>                 # adb devices -l
+  ios: <simulator 이름 또는 UDID>
