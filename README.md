@@ -28,7 +28,8 @@ personal/<project>/   개인 프로젝트 (git에 올림)
    - 회사 프로젝트(`company/`)는 git에 없어서 `knowledge.md`·`plans/`·`runs/`까지 기기 사이에 옮겨지지 않습니다. 새 기기에서는 다시 등록하고, 이전 지식·계획이 필요하면 직접 복사합니다.
 3. Artemis를 설치합니다(https://github.com/google/artemis). `git clone` 후 `./start.sh --port 8100`으로 실행합니다.
    - 도중의 "Install MCP configuration & rules now? [Y/n]"에는 **`n`**을 입력합니다(기본값이 Y라 엔터만 치면 Claude Code·Codex 전역 설정에 Artemis MCP와 규칙이 설치됩니다). 이 repo는 REST로 실행하고 규칙은 `AGENTS.md`가 정합니다.
-   - 끝에 웹 콘솔이 뜨면 설치가 끝난 것입니다. 이후에는 "실행 준비" 단계의 명령으로 띄웁니다.
+   - 서버 로그가 뜨면 브라우저에서 `http://127.0.0.1:8100`을 직접 엽니다. macOS에서는 브라우저가 자동으로 열리지 않고 "Remote environment"·`ssh -L 8000`·"Port 8000" 안내가 나올 수 있는데, 무시합니다.
+   - 열리는 것을 확인했으면 Ctrl+C로 끕니다. 이후에는 "실행 준비" 단계의 명령으로 띄웁니다.
    - 위치는 셸 프로필(`~/.zshrc` 등)에 환경 변수로 넣고, LLM 세션을 새로 띄웁니다.
    ```bash
    export ARTEMIS_HOME=~/<artemis 설치 경로>
