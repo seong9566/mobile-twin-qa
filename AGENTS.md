@@ -36,6 +36,7 @@ mobile-twin-qa/
   project.local.yaml    이 기기의 소스 경로·기기 (git 제외)
   .env                  계정·비밀값 (git 제외)
   knowledge.md          누적 지식
+  knowledge/<주제>.md   knowledge.md가 200줄을 넘을 때 옮긴 상세
   plans/                테스트 계획
   runs/<plan 파일명>/<yyyy-mm-dd-HHmm>/
     summary.md          실행 요약
@@ -89,3 +90,4 @@ mobile-twin-qa/
 ## 6. 실행 전 승인
 
 - 실행 전에 사용자에게 대상 기기·쓰는 서버·실행할 시나리오를 확인받는다.
+- 회사 프로젝트는 스크린샷이 LLM 제공자로 전송되는 것을 사용자가 승인한 뒤에만 실행한다.

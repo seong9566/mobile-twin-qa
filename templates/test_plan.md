@@ -7,6 +7,7 @@ source:
   repo: <repo URL>
   branch: <branch>
   commit: <short SHA>
+  dirty: false                 # 분석 시점에 커밋하지 않은 변경이 있었으면 true
   app_version: <버전>
 platforms: [android, ios]
 runners: { android: artemis, ios: mobile-mcp }

@@ -16,7 +16,7 @@ description: Use when registering a new app project in mobile-twin-qa — the us
 ## 2. 소스 확보
 
 1. 로컬 경로를 받았으면 그 경로를 `project.local.yaml`의 `source_path`로 쓴다.
-2. URL만 받았으면 `git clone --depth 50 <url> .cache/repos/<project>`. 이미 있으면 `git -C .cache/repos/<project> fetch` 후 기본 브랜치로 맞춘다. `source_path`는 비워 둔다.
+2. URL만 받았으면 `git clone --depth 50 --no-single-branch <url> .cache/repos/<project>`. 이미 있으면 기본 브랜치 `<b>`로 맞춘다: `git -C .cache/repos/<project> fetch --depth 50 origin <b>` → `git -C .cache/repos/<project> checkout -B <b> FETCH_HEAD`. `source_path`는 비운 채로 둔다.
 3. 짧은 SHA를 적어 둔다: `git -C <소스> rev-parse --short HEAD`.
 
 ## 3. 소스에서 읽을 것
@@ -35,7 +35,7 @@ description: Use when registering a new app project in mobile-twin-qa — the us
 ## 4. 파일 만들기
 
 - `project.yaml` ← `templates/project.yaml`. 최상위 키는 양식 그대로 두고, 필요한 값은 그 아래 하위 키로 더한다.
-- `project.local.yaml` ← `templates/project.local.yaml`. 기기 칸은 비워 둔다.
+- `project.local.yaml` ← `templates/project.local.yaml`. 로컬 경로를 받았을 때만 `source_path`를 채우고, 기기 칸은 비워 둔다.
 - `knowledge.md` ← `templates/knowledge.md`. 3단계에서 테스트에 영향을 주는 사실(셀렉터 특성·자동화가 안 되는 동작·문서-코드 불일치)을 찾았으면 규칙(AGENTS.md "파일 형식")대로 한 줄씩 넣는다.
 - `plans/`·`runs/`는 만들지 않는다.
 - 회사 프로젝트면 `git check-ignore -v <파일>`로 제외되는지 확인한다.

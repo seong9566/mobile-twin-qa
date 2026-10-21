@@ -5,10 +5,10 @@ branch: main
 
 apps:
   android:
-    package: com.hyeonseong.departureassistant
+    package: com.hyeonseong.departureassistant   # app/android/app/build.gradle.kts:22
     launch: com.hyeonseong.departureassistant/.MainActivity   # app/android/app/src/main/AndroidManifest.xml:48
   ios:
-    bundle_id: com.stec.deptest   # ios/DepartureAssistant.xcodeproj (네이티브 SwiftUI)
+    bundle_id: com.stec.deptest   # ios/DepartureAssistant.xcodeproj/project.pbxproj:309 (네이티브 SwiftUI)
 
 build:
   android: cd app && flutter build apk --dart-define-from-file=.env

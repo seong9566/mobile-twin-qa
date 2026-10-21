@@ -13,6 +13,6 @@ project.local.yaml
 !.env.example
 
 # 실행 원본 결과물
-runs/**/artifacts/
+**/runs/**/artifacts/
 
 .DS_Store

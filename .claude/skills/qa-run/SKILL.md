@@ -11,11 +11,11 @@ description: Use when running scenarios from a mobile-twin-qa test plan on a dev
 2. **계획이 낡았는지**: 소스의 현재 SHA(`qa-plan`과 같은 방법으로 찾은 소스)를 머리말 `commit`과 비교한다. 다르면 사용자에게 알리고 계속할지 묻는다.
 3. **도구 상태**: `platform`별 러너(`project.yaml`의 `runners`) — Artemis는 `tools/artemis.md`의 `GET /api/devices`, mobile-mcp는 `tools/mobile-mcp.md`. 응답이 없으면 띄우는 방법을 알려 주고 멈춘다.
 4. **확인받기** — 한 번에 묻는다:
-   - 대상 기기(`project.local.yaml`의 `devices`, 비었으면 `adb devices -l` 결과에서 고르게)
+   - 대상 기기(`project.local.yaml`의 `devices`, 비었으면 Android는 `adb devices -l`, iOS는 `xcrun simctl list devices booted` 결과에서 고르게)
    - 쓰는 서버(`project.yaml`의 `environments`)
    - 실행할 시나리오 목록과 각 등급(B는 사람이 해야 할 동작을 적는다)
    - 회사 프로젝트면 스크린샷이 LLM 제공자로 전송되는 것에 대한 승인
-   승인 없이는 `POST /api/run`을 보내지 않는다.
+   승인 없이는 어떤 러너로도 기기 조작·실행 요청을 보내지 않는다(Artemis `POST /api/run`, mobile-mcp 탭·입력 도구 모두).
 
 ## 2. 실행
 

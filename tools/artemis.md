@@ -30,12 +30,12 @@ SID=$(curl -s -X POST "$BASE/api/run" -H 'Content-Type: application/json' -d '{
 curl -s "$BASE/api/sessions/$SID"          # status: completed | failed | cancelled
 curl -s "$BASE/api/sessions/$SID/checks"   # 판정 → summary.md
 curl -s "$BASE/api/sessions/$SID/usage"    # 비용 → summary.md
-curl -s -o artifacts/run.mp4 "$BASE/api/sessions/$SID/video"
+curl -s -o artifacts/<ID>/video.mp4 "$BASE/api/sessions/$SID/video"
 curl -s -X POST "$BASE/api/stop" -H 'Content-Type: application/json' -d "{\"session_id\":\"$SID\"}"
 ```
 
 - `app_path`(실행 전 APK 설치)·`locked_app_package`는 REST·`artemis run`에만 있고 웹 콘솔·`artemis batch`에는 없다.
-- 결과물은 `runs/<plan 파일명>/<yyyy-mm-dd-HHmm>/artifacts/`에 받는다.
+- 결과물은 `runs/<plan 파일명(확장자 제외)>/<yyyy-mm-dd-HHmm>/artifacts/<시나리오 ID>/`에 받는다.
 
 ## 하지 않는 것
 

@@ -14,8 +14,8 @@ description: Use when writing or refreshing a test plan for a project registered
 ## 2. 소스 맞추기
 
 1. 소스 위치: `project.local.yaml`의 `source_path` → 없으면 `.cache/repos/<project>`(없으면 `project.yaml`의 `repo`를 받는다).
-2. `.cache` 소스는 `git fetch` 후 `project.yaml`의 `branch`로 맞춘다. `source_path`는 사용자 작업 트리이므로 브랜치를 바꾸지 않고 현재 상태를 읽는다.
-3. 기록할 값: 브랜치 · `git rev-parse --short HEAD` · 앱 버전(pubspec·gradle·Info.plist 등).
+2. `.cache` 소스는 `project.yaml`의 `branch`(`<b>`)로 맞춘다: `git -C <소스> fetch --depth 50 origin <b>` → `git -C <소스> checkout -B <b> FETCH_HEAD`. `source_path`는 사용자 작업 트리이므로 브랜치를 바꾸지 않고 현재 상태를 읽는다.
+3. 기록할 값: 브랜치 · `git rev-parse --short HEAD` · 앱 버전(pubspec·gradle·Info.plist 등) · 커밋하지 않은 변경 여부(`git status --porcelain`이 비어 있지 않으면 `dirty: true`).
 
 ## 3. 지식 정리 (분석 전에)
 
@@ -34,7 +34,7 @@ description: Use when writing or refreshing a test plan for a project registered
 d=$(date +%Y-%m-%d); f=<category>/<project>/plans/$d-<project>_test_plan.md
 [ -e "$f" ] && f=<category>/<project>/plans/$d-<project>_test_plan-$(date +%H%M).md
 ```
-기존 계획 파일은 고치지 않는다.
+그 이름도 이미 있으면 쓰지 말고 사용자에게 알린 뒤 멈춘다. 기존 계획 파일은 고치지 않는다.
 
 ## 6. 작성
 
