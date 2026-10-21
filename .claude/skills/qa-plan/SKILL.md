@@ -51,3 +51,5 @@ d=$(date +%Y-%m-%d); f=<category>/<project>/plans/$d-<project>_test_plan.md
 - 분석 중 새로 알게 된 사실을 `knowledge.md`에 넣는다(한 줄 · 근거 · 확인 시점, 같은 주제는 고쳐 쓴다, 200줄 이하).
 - `project.yaml`에서 근거가 있는 틀린 값을 발견했으면 고치고 근거를 주석으로 단다.
 - 보고: 계획 경로 · 머리말 · 시나리오 ID 목록 · 파일럿 · `knowledge.md`·`project.yaml` 변경 · 묻지 못해 정한 가정.
+
+커밋은 AGENTS.md "작업 위치와 커밋"을 따른다.

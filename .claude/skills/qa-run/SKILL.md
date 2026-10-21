@@ -54,3 +54,5 @@ description: Use when running scenarios from a mobile-twin-qa test plan on a dev
 ## 5. 보고
 
 결과 표 · 실패 판정 · 총비용 · 지식 변경 · 사용자가 할 일(원본 repo 수정 후보 등).
+
+커밋은 AGENTS.md "작업 위치와 커밋"을 따른다.
