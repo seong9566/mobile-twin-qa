@@ -97,7 +97,8 @@ mobile-twin-qa/
 | 작업 | 위치 | 커밋 |
 | --- | --- | --- |
 | 프로젝트 등록·계획 작성·실행 (`qa-init`·`qa-plan`·`qa-run`) | **메인 작업 트리** — 워크트리에서 하지 않는다 | 개인 프로젝트 변경만 `main`에 바로 커밋한다. 회사 프로젝트는 커밋하지 않는다 |
-| `AGENTS.md`·`.claude/skills/`·`templates/`·`tools/`·`.gitignore` 수정 | `.claude/worktrees/<이름>` 워크트리의 브랜치 | PR로 머지한다 |
+| 프로젝트 폴더(`personal/<project>/`·`company/<project>/`) 밖의 추적 파일 수정 (`AGENTS.md`·`CLAUDE.md`·`.claude/skills/`·`templates/`·`tools/`·`.gitignore`·`company/README.md`) | `.claude/worktrees/<이름>` 워크트리의 브랜치 | PR로 머지한다 |
 
-- 개인 프로젝트 결과 커밋은 그 프로젝트 폴더의 파일만 지정해 add한다. 메시지는 `test(<project>): <요약>`.
+- 워크트리에서 등록·계획·실행을 요청받으면(`git rev-parse --git-dir`와 `--git-common-dir`이 다르면 워크트리) 시작하지 말고 메인 작업 트리에서 열라고 안내한다.
+- 개인 프로젝트 결과는 스킬 보고 끝에 커밋할지 묻고, 승인되면 `main`에 커밋하고 push한다. 그 프로젝트 폴더의 파일만 지정해 add하고, 메시지는 `test(<project>): <요약>`.
 - 한 커밋에 결과 파일과 규칙 파일을 섞지 않는다.

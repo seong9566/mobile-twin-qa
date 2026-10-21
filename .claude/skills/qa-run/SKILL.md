@@ -5,6 +5,8 @@ description: Use when running scenarios from a mobile-twin-qa test plan on a dev
 
 # qa-run — 계획 실행·결과 기록
 
+작업 위치(메인 작업 트리)와 커밋은 AGENTS.md "작업 위치와 커밋"을 따른다.
+
 ## 1. 실행 전 점검 (기기를 건드리기 전에)
 
 1. **계획 고르기**: 사용자가 말한 계획, 없으면 `plans/`에서 가장 최근 파일. 시나리오를 말하지 않았으면 계획의 "파일럿".
@@ -54,5 +56,3 @@ description: Use when running scenarios from a mobile-twin-qa test plan on a dev
 ## 5. 보고
 
 결과 표 · 실패 판정 · 총비용 · 지식 변경 · 사용자가 할 일(원본 repo 수정 후보 등).
-
-커밋은 AGENTS.md "작업 위치와 커밋"을 따른다.
