@@ -12,7 +12,7 @@ Artemis 설치 위치는 기기마다 다르므로 `ARTEMIS_HOME` 환경 변수�
 - 휴대폰은 잠금 해제·홈 화면 상태여야 한다(잠겨 있으면 `POST /api/run`이 409).
 - 모델 설정: `$ARTEMIS_HOME/config/artemis.jsonc`. 키: `$ARTEMIS_HOME/.env`.
 - 설정을 바꾸면 서버를 재시작한다.
-- Claude 5.x 모델: 원본 Artemis는 Anthropic 요청에 `temperature`·`thinking.budget_tokens`를 보내는데, Claude 5.x는 이를 거부한다(Claude API 문서 기준, 실제 호출 미확인). `artemis/llm/router.py`의 Anthropic 분기에서 5.x 모델이면 `temperature`를 빼고 `thinking: {type: "adaptive"}`·`effort`를 보내도록 고쳐야 한다. 화면 좌표 노드(`object_detector`)는 Gemini ER로 둔다.
+- Claude 5.x 모델: 원본 Artemis는 Anthropic 요청에 `temperature`·`thinking.budget_tokens`를 보내는데, Claude 5.x는 이를 거부한다(Claude API 문서 기준). `artemis/llm/router.py`의 Anthropic 분기에서 5.x 모델이면 `temperature`를 빼고 `thinking={"type": "adaptive"}`와 effort(`ChatAnthropic`의 `reasoning_effort` 인자 → API의 `output_config.effort`)를 넘기도록 고친다. 고친 뒤 실제 호출로 한 번 확인한다. 화면 좌표 노드(`object_detector`)는 Gemini ER로 둔다.
 
 ## 실행 (REST)
 

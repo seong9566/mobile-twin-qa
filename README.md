@@ -25,8 +25,11 @@ personal/<project>/   개인 프로젝트 (git에 올림)
 1. 필요한 도구: `git` · `uv` · `jq` · Android platform-tools(`adb`) · 테스트할 앱의 빌드 도구(Flutter·Xcode 등).
 2. 이 repo를 clone합니다. 계획 작성·테스트 실행은 **메인 작업 트리**에서 합니다.
    - 이미 등록된 개인 프로젝트는 `project.local.yaml`이 없으니 `qa-init`을 다시 요청해 빠진 파일만 채웁니다.
-   - 회사 프로젝트(`company/`)는 git에 없어서 기기 사이에 옮겨지지 않습니다. 새 기기에서는 다시 등록합니다.
-3. Artemis를 설치합니다(https://github.com/google/artemis 의 README — `git clone` 후 `./start.sh`). 위치는 셸 프로필(`~/.zshrc` 등)에 환경 변수로 넣고, LLM 세션을 새로 띄웁니다.
+   - 회사 프로젝트(`company/`)는 git에 없어서 `knowledge.md`·`plans/`·`runs/`까지 기기 사이에 옮겨지지 않습니다. 새 기기에서는 다시 등록하고, 이전 지식·계획이 필요하면 직접 복사합니다.
+3. Artemis를 설치합니다(https://github.com/google/artemis). `git clone` 후 `./start.sh --port 8100`으로 실행합니다.
+   - 도중의 "Install MCP configuration & rules now? [Y/n]"에는 **`n`**을 입력합니다(기본값이 Y라 엔터만 치면 Claude Code·Codex 전역 설정에 Artemis MCP와 규칙이 설치됩니다). 이 repo는 REST로 실행하고 규칙은 `AGENTS.md`가 정합니다.
+   - 끝에 웹 콘솔이 뜨면 설치가 끝난 것입니다. 이후에는 "실행 준비" 단계의 명령으로 띄웁니다.
+   - 위치는 셸 프로필(`~/.zshrc` 등)에 환경 변수로 넣고, LLM 세션을 새로 띄웁니다.
    ```bash
    export ARTEMIS_HOME=~/<artemis 설치 경로>
    ```
