@@ -64,7 +64,7 @@ LLM에게 이렇게 요청합니다.
 
 앱 빌드·설치와 로그인은 `qa-run`이 승인 뒤에 합니다. 사람이 할 것은 아래뿐입니다.
 
-1. 테스트 계정을 `<category>/<project>/.env`에 `KEY=value` 형식으로 넣어 둡니다(키 이름은 `project.yaml`의 `accounts`, 셸 확장 없음). 없으면 `qa-run`이 넣어 달라고 요청합니다.
+1. 테스트 계정을 `<category>/<project>/.env`에 `KEY=value` 형식으로 넣어 둡니다(키 이름은 `project.yaml`의 `accounts`, 셸 확장·줄 끝 주석 없음). 없으면 `qa-run`이 넣어 달라고 요청합니다.
 2. 테스트용 서버·데이터를 준비합니다(`knowledge.md`의 "테스트 데이터·계정 준비").
 3. 기기를 잠금 해제해 둡니다.
 4. Artemis를 점검한 뒤, **별도 터미널**에서 서버를 띄워 둡니다(`ui`는 끝나지 않고 계속 돕니다).

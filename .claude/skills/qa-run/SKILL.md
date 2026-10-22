@@ -23,7 +23,7 @@ description: Use when running scenarios from a mobile-twin-qa test plan on a dev
 ## 2. 실행 준비 (승인 뒤, 첫 시나리오 전)
 
 1. **빌드·설치** (Android, 승인받았을 때): 소스(`qa-plan`과 같은 방법으로 찾은 소스) 루트에서 `project.yaml`의 `build.android`를 실행하고 `adb -s <serial> install -r <build.android_apk>`.
-   - 빌드 명령이 소스 쪽 파일(예: `--dart-define-from-file=.env`)을 쓰면 그 파일이 있는지, 가리키는 서버가 승인받은 서버인지 먼저 확인한다. 없거나 다르면 빌드하지 않고 사용자에게 알린다.
+   - 빌드 명령이 소스 쪽 파일(예: `--dart-define-from-file=.env`)을 쓰면 그 파일이 있는지, 가리키는 서버가 승인받은 서버인지 먼저 확인한다. 서버를 정하는 키 줄만 `grep '^<키>='`로 읽고 파일 전체를 읽지 않는다. 없거나 다르면 빌드하지 않고 사용자에게 알린다.
    - 빌드 전후에 `git -C <소스> status --porcelain`과 `git -C <소스> diff | shasum`을 비교한다. 하나라도 다르면(git이 무시하지 않는 파일이 바뀜) 되돌리지 말고 멈춰 사용자에게 보고한다.
    - 빌드·설치가 실패하면 오류 끝부분을 보여 주고 멈춘다.
 2. **앱 실행**: 빌드 여부와 상관없이 `adb -s <serial> shell am start -n <apps.android.launch>`.

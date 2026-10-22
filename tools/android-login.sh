@@ -5,12 +5,13 @@
 # 종료 코드: 0 입력 확인 · 2 입력할 수 없는 값 · 3 키 없음 · 4 로그인 화면을 못 찾음 · 5 입력 확인 실패 · 6 그 밖의 오류(adb 등)
 # 입력 중 값이 잠깐 adb·input 프로세스 인자로 보인다(ps).
 set +x
-set -euo pipefail
+set -Eeuo pipefail
 trap 'exit 6' ERR
 export LC_ALL=en_US.UTF-8
 [ $# -eq 4 ] || { echo "사용법: bash tools/android-login.sh <serial> <.env 경로> <아이디 키> <비밀번호 키>"; exit 6; }
 S=$1; ENV_FILE=$2; ID_KEY=$3; PW_KEY=$4
 DUMP=/sdcard/android-login-ui.xml
+adb -s "$S" get-state >/dev/null 2>&1 || { echo "기기 ${S}에 연결할 수 없다"; exit 6; }
 trap 'adb -s "$S" shell rm -f "$DUMP" >/dev/null 2>&1 || true' EXIT
 
 [ -f "${ENV_FILE}" ] || { echo "${ENV_FILE} 없음 — 사용자에게 ${ID_KEY}·${PW_KEY}를 넣어 달라고 한다"; exit 3; }
@@ -37,8 +38,8 @@ dump() {  # 화면 XML을 새로 받는다. 실패하면 빈 출력
   adb -s "$S" shell cat "$DUMP" 2>/dev/null | grep -o '<hierarchy.*' || true
 }
 nodes() { grep -oE '<node [^>]*class="android.widget.EditText"[^>]*>' || true; }
-id_node() { nodes | grep -v 'password="true"' | head -1; }
-pw_node() { nodes | grep 'password="true"' | head -1; }
+id_node() { nodes | grep -v 'password="true"' | head -1 || true; }
+pw_node() { nodes | grep 'password="true"' | head -1 || true; }
 attr() { grep -oE " $1=\"[^\"]*\"" | sed -E "s/ $1=\"(.*)\"/\1/" || true; }
 unxml() { sed -e 's/&lt;/</g' -e 's/&gt;/>/g' -e 's/&quot;/"/g' -e "s/&apos;/'/g" -e 's/&amp;/\&/g'; }
 
@@ -56,6 +57,8 @@ fill() {  # fill <id|pw> <값> — 매번 화면을 새로 읽고 그 칸을 눌
   [ -n "$node" ] || { echo "$1 칸이 사라짐 — 입력하지 않고 멈춘다"; exit 4; }
   read -r x1 y1 x2 y2 <<<"$(printf '%s' "$node" | attr bounds | tr -c '0-9' ' ')"
   adb -s "$S" shell input tap $(( (x1 + x2) / 2 )) $(( (y1 + y2) / 2 )); sleep 0.5
+  node=$(dump | "$1_node")  # 탭이 키보드 등에 맞았으면 포커스가 없다 — 그 칸에 입력하지 않는다
+  printf '%s' "$node" | grep -q 'focused="true"' || { echo "$1 칸에 포커스가 가지 않음 — 입력하지 않고 멈춘다"; exit 4; }
   t=$(printf '%s' "$node" | attr text | unxml)
   adb -s "$S" shell input keyevent KEYCODE_MOVE_END
   for (( i = 0; i < ${#t}; i += 40 )); do  # 한 번에 너무 길지 않게 나눠 지운다
@@ -67,7 +70,8 @@ fill id "$ID"
 fill pw "$PW"
 
 # 키보드가 로그인 버튼을 가리지 않게 닫는다 — 키보드가 떠 있을 때만 BACK
-if adb -s "$S" shell dumpsys input_method | grep -q 'mInputShown=true'; then
+ims=$(adb -s "$S" shell dumpsys input_method)
+if grep -q 'mInputShown=true' <<<"$ims"; then
   adb -s "$S" shell input keyevent KEYCODE_BACK; sleep 1
 fi
 
