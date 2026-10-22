@@ -22,19 +22,21 @@ description: Use when running scenarios from a mobile-twin-qa test plan on a dev
 
 ## 2. 실행 준비 (승인 뒤, 첫 시나리오 전)
 
-1. **빌드·설치** (Android): 소스(`qa-plan`과 같은 방법으로 찾은 소스) 루트에서 `project.yaml`의 `build.android`를 실행하고, `adb -s <serial> install -r <build.android_apk>` → `adb -s <serial> shell am start -n <apps.android.launch>`.
-   - 빌드 전후 `git -C <소스> status --porcelain` 출력이 같아야 한다. 달라지면 멈추고 사용자에게 보고한다.
-   - 실패하면 오류 끝부분을 보여 주고 멈춘다.
-2. **로그인** (Android, 앱이 로그인 화면일 때): 승인받은 역할의 키를 `project.yaml`의 `accounts`에서 찾아 실행한다.
+1. **빌드·설치** (Android, 승인받았을 때): 소스(`qa-plan`과 같은 방법으로 찾은 소스) 루트에서 `project.yaml`의 `build.android`를 실행하고 `adb -s <serial> install -r <build.android_apk>`.
+   - 빌드 명령이 소스 쪽 파일(예: `--dart-define-from-file=.env`)을 쓰면 그 파일이 있는지, 가리키는 서버가 승인받은 서버인지 먼저 확인한다. 없거나 다르면 빌드하지 않고 사용자에게 알린다.
+   - 빌드 전후에 `git -C <소스> status --porcelain`과 `git -C <소스> diff | shasum`을 비교한다. 하나라도 다르면(git이 무시하지 않는 파일이 바뀜) 되돌리지 말고 멈춰 사용자에게 보고한다.
+   - 빌드·설치가 실패하면 오류 끝부분을 보여 주고 멈춘다.
+2. **앱 실행**: 빌드 여부와 상관없이 `adb -s <serial> shell am start -n <apps.android.launch>`.
+3. **로그인** (Android, 앱이 로그인 화면일 때): 승인받은 역할의 키를 `project.yaml`의 `accounts`에서 찾아 실행한다. 그 역할이 `accounts`에 없으면 사용자에게 묻는다. `bash -x`로 실행하지 않는다.
    ```bash
    bash tools/android-login.sh <serial> <category>/<project>/.env <id_env> <password_env>
    ```
    - 종료 코드 0: 출력된 목록에서 로그인 버튼을 탭하고, 화면이 로그인 화면에서 바뀌었는지 확인한다.
-   - 종료 코드 3(키 없음): 사용자에게 그 키를 `<category>/<project>/.env`에 넣어 달라고 하고 기다린다. 값을 대화로 받지 않는다.
-   - 종료 코드 2·4·5: 이유를 알리고 사용자에게 직접 로그인해 달라고 한다.
+   - 종료 코드 3(키 없음): 사용자에게 그 키를 `<category>/<project>/.env`에 `KEY=value` 형식으로 넣어 달라고 하고 기다린다. 값을 대화로 받지 않는다.
+   - 그 밖의 0이 아닌 코드: 출력된 이유를 알리고 사용자에게 직접 로그인해 달라고 한다. 다시 돌리거나 스크린샷으로 대신하지 않는다. 직접 로그인으로 바꾸는 데 새 승인은 필요 없다.
    - `.env` 값은 화면·로그·대화·`goal` 어디에도 출력하지 않는다.
    - iOS는 미확인이라 사용자가 로그인한다.
-3. **사전 조건**: 첫 시나리오의 사전 조건(예: 근무 중)이 화면에 맞는지 확인한다. 맞지 않으면 사용자에게 알린다.
+4. **사전 조건**: 첫 시나리오의 사전 조건(예: 근무 중)이 화면에 맞는지 확인한다. 맞지 않으면 사용자에게 알린다.
 
 ## 3. 실행
 
