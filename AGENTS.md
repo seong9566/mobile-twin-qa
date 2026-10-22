@@ -22,7 +22,7 @@ mobile-twin-qa/
   AGENTS.md · CLAUDE.md        이 규칙 (CLAUDE.md는 이 파일을 가져온다)
   .claude/skills/              작업별 절차
   templates/                   계획·프로젝트 설정·지식 양식
-  tools/                       Artemis·mobile-mcp 연결·실행 방법
+  tools/                       Artemis·mobile-mcp 연결·실행 방법, 로그인 스크립트
   company/<project>/           회사 프로젝트 — git에 올리지 않는다
   personal/<project>/          개인 프로젝트 — git에 올린다
   .cache/repos/<project>/      repo URL로 받아 둔 소스 (git 제외)
@@ -49,7 +49,7 @@ mobile-twin-qa/
 
 ## 3. 원본 repo
 
-- 원본 repo에는 **쓰지 않는다** — 읽기만 한다.
+- 원본 repo에는 **쓰지 않는다** — 읽기만 한다. 예외는 `qa-run`의 앱 빌드로, git이 추적하지 않는 빌드 산출물만 생겨야 한다.
 - 원본 쪽에 고칠 것(테스트 코드·문구·문서 불일치)을 발견하면 계획의 "후속 작업"에 적고 사용자에게 보고한다.
 
 ## 4. 파일 형식
@@ -66,7 +66,7 @@ mobile-twin-qa/
 - `runners`에는 `project.yaml`의 `runners`를 그대로 옮긴다(계획에 없는 플랫폼도 지우지 않는다).
 - 시나리오 ID는 `<영역>-<두 자리 번호>`다. 영역은 앱의 탭·기능 이름을 영어 대문자 2~5자로 줄인다(예: `HOME-01`, `PAT-02`, `SET-01`). 프로젝트 안에서 같은 영역 코드를 계속 쓴다.
 - 시나리오마다 `platform`(`android`·`ios`·`both`) · 등급(**A 자동** · **B 반자동** · **C 수동**) · `goal` · 통과 조건 · 근거를 적는다.
-- `goal`에는 **비밀번호·토큰을 쓰지 않는다.** 로그인이 필요하면 사전 조건에서 사람이 로그인해 둔다.
+- `goal`에는 **비밀번호·토큰을 쓰지 않는다.** 로그인은 실행 전에 LLM이 `.env` 값으로 직접 한다(`qa-run` 스킬). 값이 없으면 사용자에게 `.env`에 넣어 달라고 한다.
 
 **knowledge.md**
 

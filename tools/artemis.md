@@ -32,7 +32,9 @@ RUN="$(git -C <mobile-twin-qa 경로> rev-parse --show-toplevel)/<category>/<pro
 mkdir -p "$RUN/artifacts/<ID>"
 curl -sSf -o "$RUN/artifacts/<ID>/checks.json" "$BASE/api/sessions/$SID/checks"   # 원본 저장, summary.md에는 요약만
 curl -sSf -o "$RUN/artifacts/<ID>/usage.json"  "$BASE/api/sessions/$SID/usage"
-curl -sSf -o "$RUN/artifacts/<ID>/video.mp4"   "$BASE/api/sessions/$SID/video"   # 실패하면 summary.md에 "녹화 없음"
+curl -sSf -o "$RUN/artifacts/<ID>/video.json"  "$BASE/api/sessions/$SID/video"   # 녹화 파일이 아니라 위치 정보(JSON)
+U=$(jq -r '.video_url // empty' "$RUN/artifacts/<ID>/video.json")
+[ -n "$U" ] && curl -sSf -o "$RUN/artifacts/<ID>/video.mp4" "$BASE$U"          # 비었거나 실패하면 summary.md에 "녹화 없음"
 curl -s -X POST "$BASE/api/stop" -H 'Content-Type: application/json' -d "{\"session_id\":\"$SID\"}"
 ```
 
