@@ -13,6 +13,7 @@ Artemis 설치 위치는 기기마다 다르므로 `ARTEMIS_HOME` 환경 변수�
 - 모델 설정: `$ARTEMIS_HOME/config/artemis.jsonc`. 키: `$ARTEMIS_HOME/.env`.
 - 설정을 바꾸면 서버를 재시작한다.
 - Claude 5.x 모델: 원본 Artemis는 Anthropic 요청에 `temperature`·`thinking.budget_tokens`를 보내는데, Claude 5.x는 이를 거부한다(Claude API 문서 기준). `artemis/llm/router.py`의 Anthropic 분기에서 5.x 모델이면 `temperature`를 빼고 `thinking={"type": "adaptive"}`와 effort(`ChatAnthropic`의 `reasoning_effort` 인자 → API의 `output_config.effort`)를 넘기도록 고친다. 고친 뒤 실제 호출로 한 번 확인한다. 화면 좌표 노드(`object_detector`)는 Gemini ER로 둔다.
+- 보조 노드도 Gemini를 쓴다: `step_summarizer`·`chunking`은 `GEMINI_API_KEY`가 없으면 401로 실패한다. 키가 없으면 `artemis.jsonc`에서 두 노드를 `claude-haiku-5-5`로 바꾸고, `artemis/services/llm.py`의 `get_google_llm`이 `claude-`로 시작하는 이름을 Anthropic으로 만들도록 고친다. `planner_validation`의 Gemini 401은 실행을 막지 않는다.
 
 ## 실행 (REST)
 
@@ -40,6 +41,21 @@ curl -s -X POST "$BASE/api/stop" -H 'Content-Type: application/json' -d "{\"sess
 
 - `app_path`(실행 전 APK 설치)·`locked_app_package`는 REST·`artemis run`에만 있고 웹 콘솔·`artemis batch`에는 없다.
 - 결과물은 `runs/<plan 파일명(확장자 제외)>/<yyyy-mm-dd-HHmm>/artifacts/<시나리오 ID>/`에 받는다.
+
+## 멈춤 감시
+
+세션이 `running`인 채 끝나지 않는 경우가 있다. 상태를 볼 때마다 `$ARTEMIS_HOME/traces/$SID/stdout.log`도 보고, 아래면 `POST /api/stop`으로 세션을 멈춘다.
+
+- **로그 정지**: `stdout.log`가 5분 넘게 바뀌지 않는다. 서버가 응답하지 않으면 서버를 재시작한다.
+- **행동 없는 반복**: 마지막 `Generated summary for Step` 뒤로 `LLM stopped without calling any tool`이 12번 이상 쌓였다(조작 없이 토큰만 쓴다).
+
+```bash
+LOG="$ARTEMIS_HOME/traces/$SID/stdout.log"
+[ $(( $(date +%s) - $(stat -f %m "$LOG") )) -gt 300 ] && echo 로그 정지          # macOS stat
+awk '/Generated summary for Step/{n=0} /LLM stopped without calling any tool/{n++} END{print n}' "$LOG"   # 12 이상이면 반복
+```
+
+멈춘 세션도 `checks`·`usage`·`video`를 받는다. 앱이 서버와 어긋난 상태(예: 서버에는 시작됐는데 화면은 그대로)로 남았을 수 있으니 다음 시나리오 전에 화면을 확인하고, 필요하면 앱을 다시 띄운다.
 
 ## 하지 않는 것
 
