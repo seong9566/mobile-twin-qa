@@ -108,7 +108,7 @@ mobile-twin-qa/
 - 작업 맥락(결정·할 일)은 PM vault의 `projects/mobile_twin_qa/` 문서(index·decisions·tasks/)를 참고한다.
 - 작업을 마치면 vault handoff에 한 줄 남긴다 — 손으로 쓰지 말고 스크립트로(헤더 위치·형식을 스크립트가 맞춘다, 별도 알림은 없다):
   `bash /Users/stecdev/Desktop/obsidian-workspace/stec_dev/automation/handoff.sh done mobile_twin_qa "<한 줄 설명>" [--closes QA-<번호>] [--pr <번호>]` (메모는 `note`, PM이 할 일로 가져갈 것은 `todo`. 슬러그는 정확히 `mobile_twin_qa`.)
-- 하네스 개선은 설명 앞에 `[하네스]`를 붙이고 어떤 방법(hook·skill·스크립트·CLAUDE.md 정리 등)으로 고칠지 함께 적는다. 실기기·테스트 버그는 `--bug`를 붙인다(PM이 task 노트로 바꾼다). 원본 repo에 고칠 것은 계속 계획의 "후속 작업"에 적고, PM이 task로 관리할 것만 `--bug`로도 남긴다.
+- 하네스 개선은 설명 앞에 `[하네스]`를 붙이고 어떤 방법(hook·skill·스크립트·CLAUDE.md 정리 등)으로 고칠지 함께 적는다. 실기기·테스트 버그 중 PM이 task로 관리할 것은 `--bug`를 붙인다(PM이 task 노트로 바꾼다). 원본 repo에 고칠 것은 이와 별개로 계획의 "후속 작업"에도 적는다.
 - 완료가 기존 task 노트를 해소하면 `--closes QA-<번호>`로 인용하고 `bash /Users/stecdev/Desktop/obsidian-workspace/stec_dev/automation/task.sh done QA-<번호>`로 닫는다. 애매하면 닫지 말고 handoff만 남긴다.
 - 워크트리 브랜치 이름에 task ID를 넣으면(예: `docs/QA-012-…`) 진행 중 표시가 쉬워진다.
 - 규약 정본: `/Users/stecdev/Desktop/obsidian-workspace/stec_dev/inbox/HANDOFF_GUIDE.md`
