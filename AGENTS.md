@@ -102,3 +102,13 @@ mobile-twin-qa/
 - 워크트리에서 등록·계획·실행을 요청받으면(`git rev-parse --path-format=absolute --git-dir --git-common-dir`의 두 줄이 다르면 워크트리) 시작하지 말고 메인 작업 트리에서 열라고 안내한다.
 - 개인 프로젝트 결과는 스킬 보고 끝에 커밋할지 묻고, 승인되면 `main`에 커밋하고 push한다. 그 프로젝트 폴더의 파일만 지정해 add하고, 메시지는 `test(<project>): <요약>`.
 - 한 커밋에 결과 파일과 규칙 파일을 섞지 않는다.
+
+## 8. PM 위키 연동
+
+- 작업 맥락(결정·할 일)은 PM vault의 `projects/mobile_twin_qa/` 문서(index·decisions·tasks/)를 참고한다.
+- 작업을 마치면 vault handoff에 한 줄 남긴다 — 손으로 쓰지 말고 스크립트로:
+  `bash /Users/stecdev/Desktop/obsidian-workspace/stec_dev/automation/handoff.sh done mobile_twin_qa "<한 줄 설명>" [--closes QA-<번호>] [--pr <번호>]` (메모는 `note`, PM이 할 일로 가져갈 것은 `todo`. 슬러그는 정확히 `mobile_twin_qa`.)
+- 하네스 개선은 설명 앞에 `[하네스]`를 붙이고 어떤 방법(hook·skill·스크립트·CLAUDE.md 정리 등)으로 고칠지 함께 적는다. 실기기·테스트 버그는 `--bug`를 붙인다.
+- 완료가 기존 task 노트를 해소하면 `--closes QA-<번호>`로 인용하고 `bash /Users/stecdev/Desktop/obsidian-workspace/stec_dev/automation/task.sh done QA-<번호>`로 닫는다. 애매하면 닫지 말고 handoff만 남긴다.
+- 브랜치 이름에 task ID를 넣는다(예: `docs/QA-012-…`).
+- 규약 정본: `/Users/stecdev/Desktop/obsidian-workspace/stec_dev/inbox/HANDOFF_GUIDE.md`
