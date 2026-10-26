@@ -528,6 +528,15 @@ final class AppModel {
                 notice = detachedHeadNotice
                 return
             }
+            // 확인 창이 열린 사이 브랜치가 바뀌었을 수 있으니 add 전에 다시 본다.
+            if case .branch(let branch) = head, !head.isMain {
+                pendingCommitFiles = []
+                notice = AppNotice(
+                    title: "커밋할 수 없어요",
+                    message: "main 브랜치가 아니라 커밋하지 않았어요 (현재: \(branch)). 메인 작업 트리에서 main으로 바꾼 뒤 다시 눌러 주세요."
+                )
+                return
+            }
             let shell = ProcessShellRunner()
             let add = try await shell.run(
                 "/usr/bin/git",
@@ -546,14 +555,6 @@ final class AppModel {
                 timeout: .seconds(60)
             )
             guard commit.status == 0 else { throw shellError(commit.out) }
-            if case .branch(let branch) = head, !head.isMain {
-                pendingCommitFiles = []
-                notice = AppNotice(
-                    title: "커밋했어요",
-                    message: "main 브랜치가 아니라 push하지 않았어요 (현재: \(branch)). 커밋은 로컬에 남아 있어요."
-                )
-                return
-            }
             let push: (status: Int32, out: String)
             do {
                 let remoteConfig = try await shell.run(
