@@ -692,3 +692,42 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
     #expect(received.filter { $0 == .adbUnavailable(id: "HOME-01") }.count == 1)
     #expect(await shell.recordedCalls().isEmpty)
 }
+
+@Test func rearmStallIgnoresIdleLoopBeforeKeepWaiting() async throws {
+    let plan = try fixtureDocument()
+    let scenarios = [plan.scenarios[0]]
+    let directory = try orchestratorTempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let log = StallDetector.traceLog(sessionID: "S1", artemisHome: directory, tracesDir: nil)
+    try FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let idle = "Generated summary for Step 3\n" + String(repeating: "LLM stopped without calling any tool\n", count: 12)
+    try idle.write(to: log, atomically: true, encoding: .utf8)
+    let api = FakeArtemisAPI(
+        goalIDs: goalIDs(scenarios),
+        sessionIDs: ["HOME-01": "S1"],
+        states: ["S1": Array(repeating: .running, count: 8) + [.completed]]
+    )
+    let orchestrator = makeOrchestrator(
+        api: api,
+        runDir: directory,
+        plan: plan,
+        scenarios: scenarios,
+        artemisHome: directory
+    )
+    let events = Task {
+        var received: [RunEvent] = []
+        for await event in orchestrator.events {
+            received.append(event)
+            if case .stall(let id, _) = event {
+                await orchestrator.rearmStall(id: id)
+            }
+            if event == .finished { break }
+        }
+        return received
+    }
+
+    await orchestrator.start()
+    let received = await events.value
+
+    #expect(received.filter { if case .stall = $0 { true } else { false } }.count == 1)
+}

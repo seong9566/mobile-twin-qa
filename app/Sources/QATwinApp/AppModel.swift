@@ -316,7 +316,8 @@ final class AppModel {
                 screenshotApproved: approval.screenshotApproved
             )
             let succeeded = await runStage(.prepare, prompt: prompt)
-            guard succeeded else {
+            // 준비 중에 앱 종료를 시작했으면 실행 루프(POST /api/run)를 시작하지 않는다.
+            guard succeeded, !isTerminating else {
                 activeRun = nil
                 return
             }

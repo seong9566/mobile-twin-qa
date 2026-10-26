@@ -135,7 +135,7 @@ struct RunProgressView: View {
                     if appModel.traceLogMissingScenarioIDs.contains(scenario.id) {
                         warning(
                             icon: "doc.badge.ellipsis",
-                            text: "Artemis 로그를 찾지 못해 멈춤·지출 한도 감시를 못 하고 있어요 — 설정의 ARTEMIS_HOME을 확인하세요",
+                            text: "Artemis 로그를 찾지 못해 멈춤·지출 한도 감시를 못 하고 있어요 — 설정의 ARTEMIS_HOME·trace 폴더를 확인하세요",
                             color: .qaWarn,
                             background: .qaWarnWeak
                         ) { EmptyView() }

@@ -69,6 +69,8 @@ public actor RunOrchestrator {
     private var isRunning = false
     private var sessionResults: [String: SessionState] = [:]
     private var stallRearmedAt: [String: Date] = [:]
+    private var stallRearmedLogLength: [String: Int] = [:]
+    private var lastLogLength: [String: Int] = [:]
     private var stallWarningsSent: Set<String> = []
     private var stateFile: RunStateFile
     private var stopAllRequested = false
@@ -197,6 +199,8 @@ public actor RunOrchestrator {
         stopCurrentRequested = false
         currentID = scenario.id
         stallRearmedAt[scenario.id] = nil
+        stallRearmedLogLength[scenario.id] = nil
+        lastLogLength[scenario.id] = nil
         stallWarningsSent.remove(scenario.id)
         if scenario.grade == .B {
             continuation.yield(
@@ -288,8 +292,14 @@ public actor RunOrchestrator {
             let stallBaseline = [log.modifiedAt, stallRearmedAt[scenario.id]]
                 .compactMap { $0 }
                 .max()
+            lastLogLength[scenario.id] = log.text?.count
+            // "계속 기다리기" 뒤에는 그 시점 이후 로그만 본다. 앞에 단계 요약 표지를 붙여 그 뒤의 반복만 세게 한다.
+            let stallLog = log.text.map { text -> String in
+                guard let offset = stallRearmedLogLength[scenario.id], offset <= text.count else { return text }
+                return "Generated summary for Step (계속 기다리기)\n" + String(text.dropFirst(offset))
+            }
             if !stallWarningsSent.contains(scenario.id), let signal = StallDetector.evaluate(
-                log: log.text,
+                log: stallLog,
                 modifiedAt: stallBaseline,
                 now: Date()
             ) {
@@ -346,6 +356,7 @@ public actor RunOrchestrator {
             return
         }
         stallRearmedAt[id] = Date()
+        stallRearmedLogLength[id] = lastLogLength[id]
         stallWarningsSent.remove(id)
     }
 
