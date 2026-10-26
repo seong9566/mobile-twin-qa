@@ -22,5 +22,6 @@ project.local.yaml
 
 # 실행 원본 결과물
 **/runs/**/artifacts/
+!/app/Tests/QATwinCoreTests/Fixtures/**/artifacts/
 
 .DS_Store

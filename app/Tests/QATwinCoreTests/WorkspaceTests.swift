@@ -24,7 +24,7 @@ func fixtureRoot() -> URL {
     #expect(try ws.plans(of: project).map(\.lastPathComponent).first == "2026-01-02-demo_app_test_plan.md")
     #expect(
         try ws.runs(of: project, plan: ws.plans(of: project)[0]).map(\.lastPathComponent)
-            == ["2026-01-02-1000"]
+            == ["2026-01-03-0900", "2026-01-02-1000"]
     )
 }
 

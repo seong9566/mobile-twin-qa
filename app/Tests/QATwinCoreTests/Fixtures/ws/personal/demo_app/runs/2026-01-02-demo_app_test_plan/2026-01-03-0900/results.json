@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "plan": "personal/demo_app/plans/2026-01-02-demo_app_test_plan.md",
+  "branch": "main",
+  "commit": "abc1234",
+  "appVersion": "1.0.0+1",
+  "device": "Pixel 8 · Android 15 · SERIAL",
+  "server": "dev",
+  "scenarios": [
+    {
+      "id": "HOME-01",
+      "title": "첫 화면",
+      "outcome": "실패",
+      "cause": "앱 결함",
+      "expected": "첫 화면 인사",
+      "actual": "빈 화면",
+      "reason": null,
+      "evidence": ["artifacts/HOME-01/"]
+    }
+  ]
+}
