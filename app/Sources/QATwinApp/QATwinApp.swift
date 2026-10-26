@@ -16,7 +16,7 @@ struct QATwinApp: App {
             } detail: {
                 detailView
             }
-            .frame(minWidth: 1040, minHeight: 680)
+            .frame(minWidth: 1240, minHeight: 680)
             .navigationTitle("QA Twin")
             .toolbar(removing: .title)
             .toolbar { toolbarContent }
@@ -58,7 +58,7 @@ struct QATwinApp: App {
                 openFromLaunchArguments()
             }
         }
-        .defaultSize(width: 1280, height: 800)
+        .defaultSize(width: 1440, height: 860)
 
         Settings {
             SettingsView(appModel: appModel)
@@ -99,12 +99,17 @@ struct QATwinApp: App {
                     .foregroundStyle(Color.qaSecondaryText)
             }
             .frame(minWidth: 140, maxWidth: 320, alignment: .leading)
+            .padding(.horizontal, 8)
         }
+        // 제목은 버튼이 아니므로 툴바 유리 배경을 씌우지 않는다(글자가 캡슐에 잘린다).
+        .sharedBackgroundVisibility(.hidden)
 
         ToolbarItem(placement: .principal) {
             PipelinePath(current: pipelineStep)
                 .fixedSize()
         }
+        // 단계 표시가 자체 유리 캡슐을 그리므로 툴바 공유 배경은 끈다(캡슐이 겹쳐 보인다).
+        .sharedBackgroundVisibility(.hidden)
 
         ToolbarItemGroup(placement: .primaryAction) {
             if appModel.activeStage != nil {
@@ -113,11 +118,13 @@ struct QATwinApp: App {
                     .foregroundStyle(Color.qaFail)
             }
             if appModel.phase == .reviewing {
-                Button("저장") { appModel.savePlan() }
-                    .buttonStyle(.glass)
-                    .disabled(appModel.editedScenarioIDs.isEmpty)
-                Button("실행 준비…") { appModel.presentApproval() }
-                    .buttonStyle(.glassProminent)
+                ToolbarActionButton(title: "저장", systemImage: "square.and.arrow.down", prominent: false) {
+                    appModel.savePlan()
+                }
+                .disabled(appModel.editedScenarioIDs.isEmpty)
+                ToolbarActionButton(title: "실행 준비…", systemImage: "play.fill", prominent: true) {
+                    appModel.presentApproval()
+                }
                     .disabled(
                         appModel.includedScenarioIDs.isEmpty
                             || appModel.activeRun != nil
@@ -132,10 +139,13 @@ struct QATwinApp: App {
                 .foregroundStyle(Color.qaFail)
             }
             if case .results = appModel.phase, appModel.runResults != nil {
-                Button("수정 요청 md 만들기 (\(appModel.includedResultCount))") {
+                ToolbarActionButton(
+                    title: "수정 요청 md 만들기 (\(appModel.includedResultCount))",
+                    systemImage: "doc.text",
+                    prominent: true
+                ) {
                     appModel.isFixRequestPresented = true
                 }
-                .buttonStyle(.glassProminent)
             }
         }
     }
@@ -200,6 +210,8 @@ struct QATwinApp: App {
             return
         }
         guard let path = defaults.string(forKey: "openPlan") else { return }
+        // 화면 확인용 실행이면 창을 앞으로 가져와 활성 상태로 그린다.
+        NSApp.activate()
         let planURL = URL(fileURLWithPath: path).standardizedFileURL
         if let project = appModel.projects.first(where: { planURL.path.hasPrefix($0.dir.standardizedFileURL.path + "/") }) {
             appModel.selectProject(project)
@@ -252,5 +264,24 @@ final class QATwinApplicationDelegate: NSObject, NSApplicationDelegate {
             sender.reply(toApplicationShouldTerminate: true)
         }
         return .terminateLater
+    }
+}
+
+/// 툴바 버튼: 주 버튼은 강조색 틴트 유리, 보조 버튼은 회색 틴트 유리, 둘 다 아이콘을 붙인다.
+/// `.glassProminent`만 쓰면 이 앱에서는 강조색이 입혀지지 않아 회색으로 보여 tint를 직접 준다.
+struct ToolbarActionButton: View {
+    let title: String
+    let systemImage: String
+    let prominent: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(title, systemImage: systemImage)
+                .labelStyle(.titleAndIcon)
+                .fontWeight(prominent ? .semibold : .regular)
+        }
+        .buttonStyle(.glassProminent)
+        .tint(prominent ? Color.qaAccent : Color.qaSecondaryText.opacity(0.35))
     }
 }

@@ -67,7 +67,6 @@ struct ScenarioEditor: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.qaBar.opacity(0.45))
-        .id(scenario.id)
     }
 
     private var gradeLabel: String {
