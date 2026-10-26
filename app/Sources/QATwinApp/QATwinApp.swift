@@ -284,7 +284,7 @@ struct ToolbarActionButton: View {
         if prominent {
             Button(action: action) { label }
                 .buttonStyle(.glassProminent)
-                .tint(Color.qaAccent)
+                .tint(Color.qaButtonTint)
         } else {
             // 보조 버튼은 틴트 없는 유리 — 흰 글자 + 옅은 틴트보다 활성·비활성이 잘 구분된다.
             Button(action: action) { label }

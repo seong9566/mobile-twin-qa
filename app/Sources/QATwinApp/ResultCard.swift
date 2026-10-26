@@ -9,28 +9,42 @@ struct ResultCard: View {
     let runDir: URL
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                rawValues
-                HStack(alignment: .top, spacing: 18) {
-                    video
-                    VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 16) {
+            header
+            rawValues
+            // 영상이 남는 높이를 다 쓰도록 폰 화면 비율(1080×2400)로 폭을 정한다.
+            GeometryReader { proxy in
+                let videoHeight = max(proxy.size.height - Self.captionHeight, 320)
+                let videoWidth = min(max(videoHeight * Self.phoneAspect, 240), proxy.size.width * 0.45)
+                HStack(alignment: .top, spacing: 22) {
+                    video(width: videoWidth, height: videoWidth / Self.phoneAspect)
+                    VStack(alignment: .leading, spacing: 16) {
                         expectedActual
-                        checks
+                        ScrollView {
+                            checks
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                        }
+                        .frame(maxHeight: result.outcome == .pass ? .infinity : 260)
+                        .fixedSize(horizontal: false, vertical: result.outcome != .pass)
                         if result.outcome != .pass {
                             memo
                             actions
+                        } else {
+                            Spacer(minLength: 0)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
             }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 18)
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.qaBackground)
     }
+
+    private static let phoneAspect: CGFloat = 1080.0 / 2400.0
+    private static let captionHeight: CGFloat = 26
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -81,7 +95,7 @@ struct ResultCard: View {
         }
     }
 
-    private var video: some View {
+    private func video(width: CGFloat, height: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Group {
                 if let url = Artifacts.video(runDir: runDir, id: result.id) {
@@ -100,13 +114,13 @@ struct ResultCard: View {
                     }
                 }
             }
-            .frame(width: 236, height: 420)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .frame(width: width, height: height)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
             Text("artifacts/\(result.id)/video.mp4")
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(Color.qaTertiaryText)
         }
-        .frame(width: 236)
+        .frame(width: width)
     }
 
     private var expectedActual: some View {
@@ -146,13 +160,13 @@ struct ResultCard: View {
     }
 
     private var memo: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
             Text("수정할 점 — md에 그대로 들어가요")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Color.qaSecondaryText)
             TextEditor(text: memoBinding)
                 .font(.system(size: 13))
-                .frame(minHeight: 84)
+                .frame(minHeight: 120, maxHeight: .infinity)
                 .padding(4)
                 .scrollContentBackground(.hidden)
                 .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 6))
@@ -247,9 +261,9 @@ struct ResultCard: View {
                 .foregroundStyle(Color.qaTertiaryText)
             Text(value).lineSpacing(3)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, minHeight: 66, alignment: .topLeading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
         .background(color, in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.qaLine))
     }

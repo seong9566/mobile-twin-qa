@@ -57,6 +57,12 @@ extension Color {
         light: rgb(0.039, 0.392, 0.847),
         dark: rgb(0.290, 0.608, 1)
     )
+    /// 강조 버튼 틴트: 어두운 모양에서 qaAccent(밝은 파랑)는 유리 위에서 눈부셔 채도·명도를 낮춘다.
+    static let qaButtonTint = dynamic(
+        "qaButtonTint",
+        light: rgb(0.039, 0.392, 0.847),
+        dark: rgb(0.149, 0.329, 0.612)
+    )
     static let qaAccentWeak = dynamic(
         "qaAccentWeak",
         light: rgb(0.906, 0.937, 0.984),
