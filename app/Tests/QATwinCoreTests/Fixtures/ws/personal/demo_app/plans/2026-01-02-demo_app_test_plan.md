@@ -26,13 +26,13 @@ runners: { android: artemis, ios: mobile-mcp }
 ### 4.1 홈
 
 #### HOME-01 · 첫 화면
-- platform: android · 등급: A · 계정: 사용자
+- platform: android · 등급: A · 계정: 사용자 (`user`)
 - goal: 앱을 열어 첫 화면 인사 문구를 적어.
 - 통과 조건: "안녕하세요" 문구
 - 근거: `home_screen.dart:10`
 
 #### HOME-02 · 비상 전화 (HOME-01 뒤)
-- platform: android · 등급: B(사람이 확인) · 계정: 사용자
+- platform: android · 등급: B(사람이 확인) · 계정: 사용자 (`user`, 근무 중)
 - 실행 옵션: `locked_app_package` 빼고 실행
 - goal: 비상 카드의 전화 버튼을 눌러 확인 시트 문구를 적어.
 - 통과 조건: 확인 시트

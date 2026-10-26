@@ -94,6 +94,31 @@ private func helperTempDir() throws -> URL {
     #expect(Workspace.accountEnvKeys(projectYAML: "app_id: x\n").isEmpty)
 }
 
+@Test func accountRolesReadsInlineAndNestedStyles() {
+    let yaml = """
+    app_id: demo
+    accounts:                     # 역할 → .env 키 이름
+      # ghost: { id_env: COMMENTED_ID, password_env: COMMENTED_PW }
+    # 칸 맨 앞 주석
+      field_worker: { id_env: TEST_USER_ID, password_env: TEST_USER_PASSWORD }   # 근무자
+      admin:
+        # 들여쓴 주석
+        id_env: "ADMIN_ID"
+        password_env: ADMIN_PASSWORD
+      half: { id_env: ONLY_ID }
+    environments:
+      dev: { id_env: NOT_ACCOUNT, password_env: NOT_ACCOUNT_PW }
+    """
+    #expect(
+        Workspace.accountRoles(projectYAML: yaml) == [
+            "field_worker": AccountRole(idEnv: "TEST_USER_ID", passwordEnv: "TEST_USER_PASSWORD"),
+            "admin": AccountRole(idEnv: "ADMIN_ID", passwordEnv: "ADMIN_PASSWORD"),
+        ]
+    )
+    #expect(Workspace.accountRoles(projectYAML: "accounts: {}\n").isEmpty)
+    #expect(Workspace.accountRoles(projectYAML: "app_id: x\n").isEmpty)
+}
+
 @Test func removeRunDirectoryOnlyWhenEmpty() throws {
     let root = try helperTempDir()
     defer { try? FileManager.default.removeItem(at: root) }

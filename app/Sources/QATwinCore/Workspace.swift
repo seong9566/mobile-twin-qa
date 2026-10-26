@@ -138,6 +138,56 @@ public struct Workspace: Sendable {
 
     /// project.yaml `accounts:` 아래의 id_env·password_env 값(.env 키 이름)을 나온 순서대로 돌려준다.
     public static func accountEnvKeys(projectYAML text: String) -> [String] {
+        var keys: [String] = []
+        for line in accountsBlock(projectYAML: text) {
+            for match in stripComment(line).matches(of: accountKeyPattern) where !keys.contains(String(match.2)) {
+                keys.append(String(match.2))
+            }
+        }
+        return keys
+    }
+
+    /// project.yaml `accounts:`의 역할 키 → id_env·password_env. 한 줄 `{ id_env: X, password_env: Y }`와
+    /// 들여쓴 블록 형식을 읽고, 둘 중 하나라도 없는 역할은 뺀다.
+    public static func accountRoles(projectYAML text: String) -> [String: AccountRole] {
+        var found: [String: (id: String?, password: String?)] = [:]
+        var current: (role: String, indent: Int)?
+        let rolePattern = /^(\s+)([A-Za-z_][A-Za-z0-9_]*)\s*:(.*)$/
+
+        func record(_ role: String, _ content: Substring) {
+            for match in content.matches(of: accountKeyPattern) {
+                if match.1 == "id_env" { found[role, default: (nil, nil)].id = String(match.2) }
+                else { found[role, default: (nil, nil)].password = String(match.2) }
+            }
+        }
+
+        for line in accountsBlock(projectYAML: text).dropFirst() {
+            let content = stripComment(line)
+            guard !content.allSatisfy(\.isWhitespace) else { continue }
+            let indent = content.prefix(while: \.isWhitespace).count
+            if let current, indent > current.indent {
+                record(current.role, content)
+            } else if let match = content.wholeMatch(of: rolePattern) {
+                let role = String(match.2)
+                current = (role, match.1.count)
+                found[role] = found[role] ?? (nil, nil)
+                record(role, match.3)
+            } else {
+                current = nil
+            }
+        }
+
+        return found.compactMapValues { value in
+            guard let id = value.id, let password = value.password else { return nil }
+            return AccountRole(idEnv: id, passwordEnv: password)
+        }
+    }
+
+    private nonisolated(unsafe) static let accountKeyPattern =
+        /\b(id_env|password_env)\s*:\s*["']?([A-Za-z_][A-Za-z0-9_]*)/
+
+    /// `accounts:` 줄의 나머지와 그 아래 들여쓴 줄. 칸 맨 앞 주석은 건너뛰고 블록을 끝내지 않는다.
+    private static func accountsBlock(projectYAML text: String) -> [String] {
         let lines = text.components(separatedBy: .newlines)
         guard let start = lines.firstIndex(where: { $0.hasPrefix("accounts:") }) else { return [] }
         var block = [String(lines[start].dropFirst("accounts:".count))]
@@ -146,15 +196,11 @@ public struct Workspace: Sendable {
             if !line.isEmpty, line.first?.isWhitespace == false { break }
             block.append(line)
         }
-        var keys: [String] = []
-        let pattern = /\b(?:id_env|password_env)\s*:\s*["']?([A-Za-z_][A-Za-z0-9_]*)/
-        for line in block {
-            let content = line.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
-            for match in content.matches(of: pattern) where !keys.contains(String(match.1)) {
-                keys.append(String(match.1))
-            }
-        }
-        return keys
+        return block
+    }
+
+    private static func stripComment(_ line: String) -> Substring {
+        line.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
     }
 
     /// 실행 폴더가 완전히 비어 있을 때만 지운다. rmdir(2)라 확인과 삭제가 한 번에 일어나고,
@@ -216,5 +262,16 @@ public struct Workspace: Sendable {
             $0.deletingPathExtension().lastPathComponent
                 > $1.deletingPathExtension().lastPathComponent
         }
+    }
+}
+
+/// project.yaml `accounts`의 한 역할이 쓰는 `.env` 키 이름.
+public struct AccountRole: Equatable, Sendable {
+    public let idEnv: String
+    public let passwordEnv: String
+
+    public init(idEnv: String, passwordEnv: String) {
+        self.idEnv = idEnv
+        self.passwordEnv = passwordEnv
     }
 }

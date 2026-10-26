@@ -39,7 +39,7 @@ runners: { android: artemis, ios: mobile-mcp }
 
 ### <ID> · <제목>
 
-- platform: <android|ios|both> · 등급: <A|B|C> · 계정: <역할>
+- platform: <android|ios|both> · 등급: <A|B|C> · 계정: <역할> (`<accounts 역할 키>`)
 - 사전 조건:
 - goal: <도구에 그대로 넣는 지시문 — 비밀번호 금지>
 - 통과 조건:

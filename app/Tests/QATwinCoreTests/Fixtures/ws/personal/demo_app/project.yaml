@@ -1,1 +1,3 @@
 name: demo_app
+accounts:
+  user: { id_env: DEMO_USER_ID, password_env: DEMO_USER_PASSWORD }

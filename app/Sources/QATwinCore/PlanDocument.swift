@@ -22,6 +22,8 @@ public struct Scenario: Identifiable, Hashable, Codable, Sendable {
     public var grade: Grade
     public var gradeNote: String?
     public var account: String
+    /// `계정` 칸의 첫 백틱 역할 키(project.yaml `accounts`의 키). 없으면 nil.
+    public var accountRoleKey: String? = nil
     public var precondition: String?
     public var goal: String
     public var passCondition: String?
@@ -83,6 +85,36 @@ public struct PlanDocument: Sendable {
             }
         }
         return options
+    }
+
+    /// 선택한 시나리오에 필요한 `.env` 키. 로그인하는 시나리오가 모두 `roles`에 있는 역할 키를 가지면
+    /// 그 역할들의 키만(나온 순서·중복 제거), 하나라도 없으면 준비 절의 `accountEnvKeys` 전체를 돌려준다.
+    /// `계정` 칸에 "로그아웃"이 있는 시나리오는 키가 필요 없다.
+    public func requiredEnvKeys(for scenarios: [Scenario], roles: [String: AccountRole]) -> [String] {
+        if usesAllAccountKeys(for: scenarios, roles: roles) {
+            return accountEnvKeys
+        }
+        var keys: [String] = []
+        for scenario in scenarios where Self.needsLogin(scenario) {
+            guard let roleKey = scenario.accountRoleKey, let role = roles[roleKey] else { continue }
+            for key in [role.idEnv, role.passwordEnv] where !keys.contains(key) {
+                keys.append(key)
+            }
+        }
+        return keys
+    }
+
+    /// 로그인하는 시나리오 중 `roles`에 있는 역할 키가 없는 것이 있으면 true(계정 키 전체로 돌아간다).
+    public func usesAllAccountKeys(for scenarios: [Scenario], roles: [String: AccountRole]) -> Bool {
+        scenarios.contains { scenario in
+            guard Self.needsLogin(scenario) else { return false }
+            guard let roleKey = scenario.accountRoleKey else { return true }
+            return roles[roleKey] == nil
+        }
+    }
+
+    private static func needsLogin(_ scenario: Scenario) -> Bool {
+        !scenario.account.contains("로그아웃")
     }
 
     private static func parseHeader(_ lines: [String]) -> PlanHeader {
@@ -167,6 +199,7 @@ public struct PlanDocument: Sendable {
             var grade = Grade.C
             var gradeNote: String?
             var account = ""
+            var accountRoleKey: String?
             var precondition: String?
             var goal = ""
             var passCondition: String?
@@ -183,6 +216,9 @@ public struct PlanDocument: Sendable {
                     grade = Grade(rawValue: fields[2]) ?? .C
                     gradeNote = fields[3].isEmpty ? nil : fields[3]
                     account = fields[4]
+                    accountRoleKey = backtickValues(in: account).first {
+                        matches(#"^[A-Za-z_][A-Za-z0-9_]*$"#, in: $0) != nil
+                    }
                 } else if trimmed.hasPrefix("- 사전 조건:") {
                     precondition = fieldValue(trimmed)
                 } else if trimmed.hasPrefix("- goal:") {
@@ -204,6 +240,7 @@ public struct PlanDocument: Sendable {
                     grade: grade,
                     gradeNote: gradeNote,
                     account: account,
+                    accountRoleKey: accountRoleKey,
                     precondition: precondition,
                     goal: goal,
                     passCondition: passCondition,
