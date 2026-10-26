@@ -92,6 +92,7 @@ final class AppModel {
     var pendingCommitFiles: [String] = []
     var isCommitConfirmationPresented = false
 
+    @ObservationIgnored private var artemisLogReader: LogTailReader?
     @ObservationIgnored private var claudeRunner: ClaudeRunner?
     @ObservationIgnored private var isTerminating = false
     @ObservationIgnored private var reviewSaveTask: Task<Void, Never>?
@@ -389,11 +390,14 @@ final class AppModel {
                 ? nil
                 : URL(fileURLWithPath: expandedPath(artemisTracesDir))
         )
-        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+        if artemisLogReader?.url != url {
+            artemisLogReader = LogTailReader(url: url)
+        }
+        guard artemisLogReader?.read() == true, let reader = artemisLogReader else {
             artemisLog = "로그를 기다리고 있어요."
             return
         }
-        artemisLog = text.components(separatedBy: .newlines).suffix(200).joined(separator: "\n")
+        artemisLog = reader.tail
     }
 
     func updateMemo(id: String, memo: String) {
@@ -503,7 +507,12 @@ final class AppModel {
                 ["-C", workspace.root.path, "commit", "-m", message, "--"] + pendingCommitFiles
             )
             guard commit.status == 0 else { throw shellError(commit.out) }
-            let push = try await shell.run("/usr/bin/git", ["-C", workspace.root.path, "push"])
+            let push: (status: Int32, out: String)
+            do {
+                push = try await shell.run("/usr/bin/git", ["-C", workspace.root.path, "push"], timeout: .seconds(60))
+            } catch ShellRunnerError.timedOut {
+                throw shellError("git push가 60초 안에 끝나지 않아 중단했어요. 커밋은 로컬에 남아 있어요.")
+            }
             guard push.status == 0 else { throw shellError(push.out) }
             pendingCommitFiles = []
             notice = AppNotice(title: "커밋했어요", message: message)

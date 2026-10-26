@@ -68,9 +68,8 @@ public actor RunOrchestrator {
     private var currentSessionID: String?
     private var isRunning = false
     private var sessionResults: [String: SessionState] = [:]
+    private var logReaders: [String: LogTailReader] = [:]
     private var stallRearmedAt: [String: Date] = [:]
-    private var stallRearmedLogLength: [String: Int] = [:]
-    private var lastLogLength: [String: Int] = [:]
     private var stallWarningsSent: Set<String> = []
     private var stateFile: RunStateFile
     private var stopAllRequested = false
@@ -199,8 +198,7 @@ public actor RunOrchestrator {
         stopCurrentRequested = false
         currentID = scenario.id
         stallRearmedAt[scenario.id] = nil
-        stallRearmedLogLength[scenario.id] = nil
-        lastLogLength[scenario.id] = nil
+        logReaders[scenario.id] = nil
         stallWarningsSent.remove(scenario.id)
         if scenario.grade == .B {
             continuation.yield(
@@ -230,6 +228,11 @@ public actor RunOrchestrator {
         }
 
         currentSessionID = sessionID
+        logReaders[scenario.id] = LogTailReader(url: StallDetector.traceLog(
+            sessionID: sessionID,
+            artemisHome: artemisHome,
+            tracesDir: tracesDir
+        ))
         setState(.running(sessionID: sessionID), for: scenario.id)
         if adbPath == nil {
             continuation.yield(.adbUnavailable(id: scenario.id))
@@ -269,8 +272,8 @@ public actor RunOrchestrator {
                 return .continued
             }
 
-            let log = traceLog(sessionID: sessionID)
-            if sessionState == .running, log.text == nil {
+            let log = readTraceLog(id: scenario.id)
+            if sessionState == .running, !log.exists {
                 traceLogMissingCount += 1
                 if traceLogMissingCount == 6, !didEmitTraceLogMissing {
                     continuation.yield(.traceLogMissing(id: scenario.id))
@@ -279,7 +282,7 @@ public actor RunOrchestrator {
             } else {
                 traceLogMissingCount = 0
             }
-            if containsSpendLimit(log.text) {
+            if log.exists, log.reader?.containsSpendLimit == true {
                 try? await api.stop(sessionID)
                 setState(.held(reason: "API 지출 한도"), for: scenario.id)
                 markWaitingAsNotRun(reason: "API 지출 한도")
@@ -292,16 +295,9 @@ public actor RunOrchestrator {
             let stallBaseline = [log.modifiedAt, stallRearmedAt[scenario.id]]
                 .compactMap { $0 }
                 .max()
-            if let length = log.text?.count {
-                lastLogLength[scenario.id] = length
-            }
-            // "계속 기다리기" 뒤에는 그 시점 이후 로그만 본다. 앞에 단계 요약 표지를 붙여 그 뒤의 반복만 세게 한다.
-            let stallLog = log.text.map { text -> String in
-                guard let offset = stallRearmedLogLength[scenario.id], offset <= text.count else { return text }
-                return "Generated summary for Step (계속 기다리기)\n" + String(text.dropFirst(offset))
-            }
+            // "계속 기다리기" 뒤에는 그 시점 이후 로그만 본다(rearmStall이 리더에 기준점을 남긴다).
             if !stallWarningsSent.contains(scenario.id), let signal = StallDetector.evaluate(
-                log: stallLog,
+                idleCount: log.exists ? log.reader?.idleCount : nil,
                 modifiedAt: stallBaseline,
                 now: Date()
             ) {
@@ -358,7 +354,9 @@ public actor RunOrchestrator {
             return
         }
         stallRearmedAt[id] = Date()
-        stallRearmedLogLength[id] = lastLogLength[id]
+        if logReaders[id]?.hasRead == true {
+            logReaders[id]?.markIdleBaseline()
+        }
         stallWarningsSent.remove(id)
     }
 
@@ -402,24 +400,15 @@ public actor RunOrchestrator {
         }
     }
 
-    private func traceLog(sessionID: String) -> (text: String?, modifiedAt: Date?) {
-        let url = StallDetector.traceLog(
-            sessionID: sessionID,
-            artemisHome: artemisHome,
-            tracesDir: tracesDir
-        )
-        let text = try? String(contentsOf: url, encoding: .utf8)
-        let attributes = try? fileManager.attributesOfItem(atPath: url.path)
-        return (text, attributes?[.modificationDate] as? Date)
-    }
-
-    private func containsSpendLimit(_ log: String?) -> Bool {
-        guard let log else {
-            return false
+    /// 지난번 이후 새로 붙은 로그만 읽는다. 읽지 못했으면 exists가 false다.
+    private func readTraceLog(id: String) -> (exists: Bool, reader: LogTailReader?, modifiedAt: Date?) {
+        guard logReaders[id] != nil else {
+            return (false, nil, nil)
         }
-        return log.localizedCaseInsensitiveContains(
-            "You have reached your specified API usage limits"
-        ) || log.localizedCaseInsensitiveContains("enforced_spend_limit_reached")
+        let exists = logReaders[id]?.read() ?? false
+        let reader = logReaders[id]
+        let attributes = reader.flatMap { try? fileManager.attributesOfItem(atPath: $0.url.path) }
+        return (exists, reader, attributes?[.modificationDate] as? Date)
     }
 
     private func isWifiDown() async -> Bool {

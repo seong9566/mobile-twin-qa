@@ -117,7 +117,7 @@ private actor FakeShellRunner: ShellRunner {
         self.output = output
     }
 
-    func run(_ exe: String, _ args: [String]) async throws -> (status: Int32, out: String) {
+    func run(_ exe: String, _ args: [String], timeout: Duration) async throws -> (status: Int32, out: String) {
         calls.append((exe, args))
         return (0, output)
     }
