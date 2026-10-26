@@ -267,3 +267,128 @@ public struct PlanDocument {
         }
     }
 }
+
+extension PlanDocument {
+    public func updating(id: String, goal: String, passCondition: String?) throws -> PlanDocument {
+        guard let scenarioIndex = scenarios.firstIndex(where: { $0.id == id }) else {
+            throw NSError(
+                domain: "QATwinCore.PlanDocument",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "시나리오를 찾을 수 없어요: \(id)"]
+            )
+        }
+
+        var lines = text.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+        let headingPrefixes = ["### \(id) · ", "#### \(id) · "]
+        guard let headingIndex = lines.firstIndex(where: { line in
+            headingPrefixes.contains(where: line.hasPrefix)
+        }) else {
+            throw NSError(
+                domain: "QATwinCore.PlanDocument",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "시나리오 제목을 찾을 수 없어요: \(id)"]
+            )
+        }
+
+        let blockEnd = lines[(headingIndex + 1)...].firstIndex(where: { $0.hasPrefix("#") }) ?? lines.endIndex
+        guard let goalIndex = lines[(headingIndex + 1)..<blockEnd].firstIndex(where: {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("- goal:")
+        }) else {
+            throw NSError(
+                domain: "QATwinCore.PlanDocument",
+                code: 3,
+                userInfo: [NSLocalizedDescriptionKey: "goal 줄을 찾을 수 없어요: \(id)"]
+            )
+        }
+
+        let flattenedGoal = Self.flattenedFieldValue(goal)
+        lines[goalIndex] = Self.replacingFieldValue(in: lines[goalIndex], with: flattenedGoal)
+
+        var updatedScenarios = scenarios
+        updatedScenarios[scenarioIndex].goal = flattenedGoal
+        if let passCondition {
+            let flattenedPassCondition = Self.flattenedFieldValue(passCondition)
+            if let passConditionIndex = lines[(headingIndex + 1)..<blockEnd].firstIndex(where: {
+                $0.trimmingCharacters(in: .whitespaces).hasPrefix("- 통과 조건:")
+            }) {
+                lines[passConditionIndex] = Self.replacingFieldValue(
+                    in: lines[passConditionIndex],
+                    with: flattenedPassCondition
+                )
+            } else {
+                lines.insert("- 통과 조건: \(flattenedPassCondition)", at: goalIndex + 1)
+            }
+            updatedScenarios[scenarioIndex].passCondition = flattenedPassCondition
+        }
+
+        return PlanDocument(
+            url: url,
+            text: lines.joined(separator: "\n"),
+            header: header,
+            scenarios: updatedScenarios,
+            commonRunOptions: commonRunOptions,
+            accountEnvKeys: accountEnvKeys
+        )
+    }
+
+    public func write(to url: URL) throws {
+        try text.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    private static func flattenedFieldValue(_ value: String) -> String {
+        value.split(whereSeparator: { $0.isNewline })
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .joined(separator: " ")
+            .trimmingCharacters(in: .whitespaces)
+    }
+
+    private static func replacingFieldValue(in line: String, with value: String) -> String {
+        guard let separator = line.firstIndex(of: ":") else {
+            return line
+        }
+        return String(line[...separator]) + " " + value
+    }
+}
+
+public enum PlanSaveTarget {
+    public static func resolve(plan: URL, hasRuns: Bool, now: Date) -> URL? {
+        guard hasRuns else {
+            return plan
+        }
+
+        let name = plan.lastPathComponent
+        guard name.count > 11,
+              let marker = name.range(of: "_test_plan", options: .backwards)
+        else {
+            return nil
+        }
+
+        let projectStart = name.index(name.startIndex, offsetBy: 11)
+        guard projectStart < marker.lowerBound else {
+            return nil
+        }
+        let project = String(name[projectStart..<marker.lowerBound])
+
+        let dateFormatter = DateFormatter()
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+        dateFormatter.timeZone = .current
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+
+        let plansDirectory = plan.deletingLastPathComponent()
+        let baseTarget = plansDirectory.appending(
+            path: "\(dateFormatter.string(from: now))-\(project)_test_plan.md"
+        )
+        guard FileManager.default.fileExists(atPath: baseTarget.path) else {
+            return baseTarget
+        }
+
+        dateFormatter.dateFormat = "HHmm"
+        let timedTarget = plansDirectory.appending(
+            path: "\(baseTarget.deletingPathExtension().lastPathComponent)-\(dateFormatter.string(from: now)).md"
+        )
+        guard FileManager.default.fileExists(atPath: timedTarget.path) else {
+            return timedTarget
+        }
+        return nil
+    }
+}
