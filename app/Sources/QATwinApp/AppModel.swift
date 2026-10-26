@@ -582,7 +582,15 @@ final class AppModel {
         stageCost = nil
         stageStartedAt = .now
         stageIsRunning = true
-        let runner = ClaudeRunner(executable: resolvedClaudeURL(), workspaceRoot: workspace.root)
+        var environment = ["ARTEMIS_HOME": expandedPath(artemisHome)]
+        if !artemisTracesDir.isEmpty {
+            environment["ARTEMIS_TRACES_DIR"] = expandedPath(artemisTracesDir)
+        }
+        let runner = ClaudeRunner(
+            executable: resolvedClaudeURL(),
+            workspaceRoot: workspace.root,
+            environment: environment
+        )
         claudeRunner = runner
         do {
             for try await event in runner.run(prompt: prompt) {

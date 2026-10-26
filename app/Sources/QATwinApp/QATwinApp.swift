@@ -17,8 +17,6 @@ struct QATwinApp: App {
                 detailView
             }
             .frame(minWidth: 1040, minHeight: 680)
-            // 확정 목업은 밝은 모양이다. 어두운 모양 토큰을 만들기 전까지 밝게 고정한다.
-            .preferredColorScheme(.light)
             .navigationTitle("QA Twin")
             .toolbar(removing: .title)
             .toolbar { toolbarContent }
@@ -100,7 +98,7 @@ struct QATwinApp: App {
                     .font(.system(size: 11))
                     .foregroundStyle(Color.qaSecondaryText)
             }
-            .frame(minWidth: 260, alignment: .leading)
+            .frame(minWidth: 140, maxWidth: 320, alignment: .leading)
         }
 
         ToolbarItem(placement: .principal) {
@@ -111,27 +109,30 @@ struct QATwinApp: App {
         ToolbarItemGroup(placement: .primaryAction) {
             if case .stage = appModel.phase {
                 Button("중지", systemImage: "stop") { appModel.cancelStage() }
+                    .buttonStyle(.glass)
                     .foregroundStyle(Color.qaFail)
                     .disabled(!appModel.stageIsRunning)
             }
             if appModel.phase == .reviewing {
                 Button("저장") { appModel.savePlan() }
+                    .buttonStyle(.glass)
                     .disabled(appModel.editedScenarioIDs.isEmpty)
                 Button("실행 준비…") { appModel.isApprovalPresented = true }
-                    .buttonStyle(.borderedProminent)
+                    .buttonStyle(.glassProminent)
                     .disabled(appModel.includedScenarioIDs.isEmpty)
             }
             if case .running = appModel.phase {
                 Button("전체 중지…", systemImage: "stop") {
                     isStopConfirmationPresented = true
                 }
+                .buttonStyle(.glass)
                 .foregroundStyle(Color.qaFail)
             }
             if case .results = appModel.phase {
                 Button("수정 요청 md 만들기 (\(appModel.includedResultCount))") {
                     appModel.isFixRequestPresented = true
                 }
-                .buttonStyle(.borderedProminent)
+                .buttonStyle(.glassProminent)
             }
         }
     }

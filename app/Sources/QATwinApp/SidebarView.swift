@@ -25,7 +25,6 @@ struct SidebarView: View {
             ClaudeRateLimitView(limits: appModel.rateLimits, compact: true)
         }
         .padding(8)
-        .background(Color.qaSidebar)
         .task {
             while !Task.isCancelled {
                 appModel.refreshRateLimits()
@@ -115,7 +114,7 @@ struct SidebarView: View {
                     ? Color.qaAccent : .clear,
                 in: RoundedRectangle(cornerRadius: 6)
             )
-            .foregroundStyle(isSelectedPlan(plan) ? .white : Color.qaText)
+            .foregroundStyle(isSelectedPlan(plan) ? Color.qaSelectedText : Color.qaText)
         }
         .buttonStyle(.plain)
     }

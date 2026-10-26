@@ -88,11 +88,11 @@ struct ResultsView: View {
                             .font(.system(size: 12, design: .monospaced))
                         Text(outcomeText(result))
                             .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(isSelected(result) ? Color.white : outcomeColor(result))
+                            .foregroundStyle(isSelected(result) ? Color.qaSelectedText : outcomeColor(result))
                     }
                     Text("\(title(result)) · \(causeText(result))")
                         .font(.system(size: 12))
-                        .foregroundStyle(isSelected(result) ? Color.white.opacity(0.88) : Color.qaSecondaryText)
+                        .foregroundStyle(isSelected(result) ? Color.qaSelectedText.opacity(0.88) : Color.qaSecondaryText)
                         .lineLimit(1)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -101,7 +101,7 @@ struct ResultsView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
-        .foregroundStyle(isSelected(result) ? Color.white : Color.qaText)
+        .foregroundStyle(isSelected(result) ? Color.qaSelectedText : Color.qaText)
         .background(isSelected(result) ? Color.qaAccent : .clear, in: RoundedRectangle(cornerRadius: 6))
     }
 
@@ -119,7 +119,7 @@ struct ResultsView: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 7)
-            .foregroundStyle(isSelected(result) ? Color.white : Color.qaText)
+            .foregroundStyle(isSelected(result) ? Color.qaSelectedText : Color.qaText)
             .background(isSelected(result) ? Color.qaAccent : .clear, in: RoundedRectangle(cornerRadius: 6))
         }
         .buttonStyle(.plain)
@@ -131,7 +131,11 @@ struct ResultsView: View {
             Divider().frame(height: 12)
             Text("입력 \(tokens(totals.promptTokens)) · 출력 \(tokens(totals.completionTokens)) 토큰")
             Divider().frame(height: 12)
-            Text("판정: Claude Code · \(duration(appModel.judgeDuration))")
+            if FileManager.default.fileExists(atPath: runDir.appending(path: "results.json").path) {
+                Text(appModel.judgeDuration.map { "판정: Claude Code · \(duration($0))" } ?? "판정: Claude Code")
+            } else {
+                Text("판정: 채팅으로 기록됨")
+            }
             Divider().frame(height: 12)
             Text("메모는 자동 저장돼요")
             Spacer()
@@ -140,7 +144,7 @@ struct ResultsView: View {
         .foregroundStyle(Color.qaSecondaryText)
         .padding(.horizontal, 14)
         .frame(height: 28)
-        .background(Color.qaBar)
+        .background(.bar)
     }
 
     private var results: [ScenarioResult] {
@@ -232,8 +236,7 @@ struct ResultsView: View {
         return String(format: "%.2fM", Double(value) / 1_000_000)
     }
 
-    private func duration(_ value: TimeInterval?) -> String {
-        guard let value else { return "기록 없음" }
+    private func duration(_ value: TimeInterval) -> String {
         let seconds = Int(value)
         return "\(seconds / 60)분 \(seconds % 60)초"
     }
@@ -289,6 +292,7 @@ struct FixRequestView: View {
                         .padding(.horizontal, 20)
                         .padding(.vertical, 16)
                 }
+                .background(Color.qaBackground)
             }
             Divider()
             HStack(spacing: 8) {

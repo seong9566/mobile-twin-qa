@@ -260,8 +260,13 @@ public enum Artifacts {
             return nil
         }
 
-        let passed = checks.records.count { $0.status == "passed" }
-        return (passed: passed, failed: checks.records.count - passed)
+        var seen = Set<String>()
+        let records = checks.records.enumerated().reversed().filter { _, record in
+            guard let key = record.deduplicationKey else { return true }
+            return seen.insert(key).inserted
+        }
+        let passed = records.count { $0.element.status == "passed" }
+        return (passed: passed, failed: records.count - passed)
     }
 
     private struct Checks: Decodable {
@@ -269,6 +274,22 @@ public enum Artifacts {
     }
 
     private struct Record: Decodable {
+        let checkpointID: String?
+        let itemText: String?
         let status: String
+        let subgoalText: String?
+
+        var deduplicationKey: String? {
+            if let checkpointID, !checkpointID.isEmpty { return "checkpoint:\(checkpointID)" }
+            if let text = itemText ?? subgoalText { return "text:\(text)" }
+            return nil
+        }
+
+        enum CodingKeys: String, CodingKey {
+            case checkpointID = "checkpoint_id"
+            case itemText = "item_text"
+            case status
+            case subgoalText = "subgoal_text"
+        }
     }
 }

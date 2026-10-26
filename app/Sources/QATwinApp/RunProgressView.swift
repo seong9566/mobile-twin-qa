@@ -198,7 +198,7 @@ struct RunProgressView: View {
         .foregroundStyle(Color.qaSecondaryText)
         .padding(.horizontal, 14)
         .frame(height: 28)
-        .background(Color.qaBar)
+        .background(.bar)
     }
 
     private var scenarios: [Scenario] {

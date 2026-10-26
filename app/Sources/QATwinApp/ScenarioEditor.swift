@@ -21,7 +21,8 @@ struct ScenarioEditor: View {
                     .foregroundStyle(Color.qaSecondaryText)
                 Text(draft.title)
                     .font(.system(size: 16, weight: .semibold))
-                Grid(alignment: .leading, horizontalSpacing: 10, verticalSpacing: 4) {
+                    .fixedSize(horizontal: false, vertical: true)
+                VStack(alignment: .leading, spacing: 4) {
                     detail("등급", gradeLabel)
                     detail("플랫폼", draft.platform)
                     detail("계정", draft.account)
@@ -64,6 +65,7 @@ struct ScenarioEditor: View {
                 .foregroundStyle(Color.qaTertiaryText)
         }
         .padding(18)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.qaBar.opacity(0.45))
         .id(scenario.id)
     }
@@ -76,10 +78,16 @@ struct ScenarioEditor: View {
     }
 
     private func detail(_ name: String, _ value: String) -> some View {
-        GridRow {
-            Text(name).foregroundStyle(Color.qaTertiaryText)
+        // Grid는 값의 이상적인 폭으로 칸을 넓혀 창 밖으로 밀어낸다. 라벨 폭을 고정하고 값은 줄바꿈한다.
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(name)
+                .foregroundStyle(Color.qaTertiaryText)
+                .frame(width: 64, alignment: .leading)
             Text(value)
                 .font(name == "근거" ? .system(.caption, design: .monospaced) : .system(size: 12))
+                .lineLimit(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 

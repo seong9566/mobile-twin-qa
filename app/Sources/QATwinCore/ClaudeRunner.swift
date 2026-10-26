@@ -209,6 +209,7 @@ private final class ClaudeStreamState: @unchecked Sendable {
 }
 
 public final class ClaudeRunner: @unchecked Sendable {
+    private let environment: [String: String]
     private let executable: URL
     private let lock = NSLock()
     private var process: Process?
@@ -216,8 +217,10 @@ public final class ClaudeRunner: @unchecked Sendable {
 
     public init(
         executable: URL = FileManager.default.homeDirectoryForCurrentUser.appending(path: ".local/bin/claude"),
-        workspaceRoot: URL
+        workspaceRoot: URL,
+        environment: [String: String] = [:]
     ) {
+        self.environment = environment
         self.executable = executable
         self.workspaceRoot = workspaceRoot
     }
@@ -243,6 +246,7 @@ public final class ClaudeRunner: @unchecked Sendable {
                 "bypassPermissions",
             ]
             process.currentDirectoryURL = workspaceRoot
+            process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, value in value }
             process.executableURL = executable
             process.standardError = FileHandle.nullDevice
             process.standardOutput = output

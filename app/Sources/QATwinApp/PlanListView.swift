@@ -6,7 +6,7 @@ struct PlanListView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HSplitView {
+            HStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .firstTextBaseline, spacing: 10) {
                         Text("이번에 돌릴 시나리오")
@@ -87,10 +87,12 @@ struct PlanListView: View {
 
                 if let scenario = appModel.selectedScenario {
                     ScenarioEditor(appModel: appModel, scenario: scenario)
-                        .frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
+                        .frame(width: 360)
+                        .overlay(alignment: .leading) { Divider() }
                 } else {
                     ContentUnavailableView("시나리오를 선택해 주세요", systemImage: "checklist")
-                        .frame(minWidth: 300, idealWidth: 360, maxWidth: 420)
+                        .frame(width: 360)
+                        .overlay(alignment: .leading) { Divider() }
                 }
             }
 
@@ -114,7 +116,7 @@ struct PlanListView: View {
         .foregroundStyle(Color.qaSecondaryText)
         .padding(.horizontal, 14)
         .frame(height: 28)
-        .background(Color.qaBar)
+        .background(.bar)
     }
 
     private func includedBinding(_ id: String) -> Binding<Bool> {

@@ -29,6 +29,7 @@ struct ResultCard: View {
             .padding(.horizontal, 22)
             .padding(.vertical, 18)
         }
+        .background(Color.qaBackground)
     }
 
     private var header: some View {
@@ -95,7 +96,7 @@ struct ResultCard: View {
                             Text("녹화 없음")
                                 .font(.system(size: 12))
                         }
-                        .foregroundStyle(Color.white.opacity(0.9))
+                        .foregroundStyle(Color.qaVideoText.opacity(0.9))
                     }
                 }
             }
@@ -274,11 +275,21 @@ private struct ArtemisCheck: Identifiable {
               let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let records = object["records"] as? [[String: Any]]
         else { return [] }
-        return records.enumerated().compactMap { index, record in
-            guard let text = record["item_text"] as? String ?? record["subgoal_text"] as? String else {
-                return nil
+        var seen = Set<String>()
+        let values = records.enumerated().reversed().compactMap { index, record -> ArtemisCheck? in
+            let checkpointID = record["checkpoint_id"] as? String
+            let text = record["item_text"] as? String ?? record["subgoal_text"] as? String
+            let key: String? = if let checkpointID, !checkpointID.isEmpty {
+                "checkpoint:\(checkpointID)"
+            } else if let text {
+                "text:\(text)"
+            } else {
+                nil
             }
+            if let key, !seen.insert(key).inserted { return nil }
+            guard let text else { return nil }
             return ArtemisCheck(id: index, passed: record["status"] as? String == "passed", text: text)
         }
+        return Array(values.reversed())
     }
 }

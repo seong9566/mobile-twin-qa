@@ -35,3 +35,18 @@ private func fixtureRun(_ name: String) -> URL {
     let summary = Artifacts.checksSummary(runDir: fixtureRun("2026-01-02-1000"), id: "HOME-01")
     #expect(summary?.passed == 1 && summary?.failed == 1)
 }
+
+@Test func checksSummaryKeepsLastCheckpointRecord() throws {
+    let runDir = FileManager.default.temporaryDirectory.appending(
+        path: "QATwinCoreRunResultsTests-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: runDir) }
+    let artifacts = runDir.appending(path: "artifacts/HOME-01", directoryHint: .isDirectory)
+    try FileManager.default.createDirectory(at: artifacts, withIntermediateDirectories: true)
+    let checks = #"{"records":[{"checkpoint_id":"CP-1","item_text":"첫 화면","status":"failed"},{"checkpoint_id":"CP-1","item_text":"첫 화면","status":"passed"}]}"#
+    try checks.write(to: artifacts.appending(path: "checks.json"), atomically: true, encoding: .utf8)
+
+    let summary = Artifacts.checksSummary(runDir: runDir, id: "HOME-01")
+    #expect(summary?.passed == 1 && summary?.failed == 0)
+}
