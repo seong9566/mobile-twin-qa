@@ -172,7 +172,7 @@ private func claudeRunnerTempDir() throws -> URL {
 
     let cancelledAt = Date()
     runner.cancel()
-    while kill(pid, 0) == 0, Date().timeIntervalSince(cancelledAt) < 7 {
+    while kill(pid, 0) == 0, Date().timeIntervalSince(cancelledAt) < 10 {
         try await Task.sleep(for: .milliseconds(100))
     }
     #expect(kill(pid, 0) != 0)

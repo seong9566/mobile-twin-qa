@@ -42,3 +42,16 @@ private func tempFile(_ contents: String) -> URL {
         try EnvFile(url: tempFile("")).upsert(key: "a-b", value: "x")
     }
 }
+
+@Test func valuesReturnsNonEmptyUnquotedValues() {
+    #expect(EnvFile(url: tempFile("# X=1\nA=\nB=\"two\"\nC=셋\n")).values() == ["two", "셋"])
+}
+
+@Test func redactMasksLongestValueFirst() {
+    #expect(
+        SecretRedactor.redact("id=demo pw=demo1234 끝", values: ["demo", "demo1234"])
+            == "id=**** pw=**** 끝"
+    )
+    #expect(SecretRedactor.redact("비밀번호는 한글암호예요", values: ["한글암호", ""]) == "비밀번호는 ****예요")
+    #expect(SecretRedactor.redact("그대로", values: []) == "그대로")
+}

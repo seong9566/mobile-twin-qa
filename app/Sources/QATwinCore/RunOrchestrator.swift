@@ -287,6 +287,7 @@ public actor RunOrchestrator {
                 setState(.held(reason: "API 지출 한도"), for: scenario.id)
                 markWaitingAsNotRun(reason: "API 지출 한도")
                 continuation.yield(.spendLimitReached)
+                logReaders[scenario.id] = nil
                 currentID = nil
                 currentSessionID = nil
                 return .spendLimit
@@ -329,6 +330,7 @@ public actor RunOrchestrator {
                     .finished(sessionID: sessionID, artemis: sessionState.rawValue),
                     for: scenario.id
                 )
+                logReaders[scenario.id] = nil
                 currentID = nil
                 currentSessionID = nil
                 return .continued
@@ -366,6 +368,7 @@ public actor RunOrchestrator {
         }
         try? await api.stop(sessionID)
         setState(.held(reason: "사용자 중지"), for: id)
+        logReaders[id] = nil
         currentID = nil
         currentSessionID = nil
         if stopAllRequested {

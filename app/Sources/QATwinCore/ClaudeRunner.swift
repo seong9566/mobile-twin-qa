@@ -176,6 +176,7 @@ private final class ClaudeStreamState: @unchecked Sendable {
     private let lock = NSLock()
     private var resultSeen = false
     private var stderrBuffer = Data()
+    private let stderrReadLock = NSLock()
 
     init(continuation: AsyncThrowingStream<ClaudeEvent, Error>.Continuation) {
         self.continuation = continuation
@@ -190,11 +191,29 @@ private final class ClaudeStreamState: @unchecked Sendable {
         events.forEach { continuation.yield($0) }
     }
 
-    func receiveStderr(_ data: Data) {
-        lock.withLock {
-            stderrBuffer.append(data)
-            if stderrBuffer.count > ClaudeRunnerError.stderrKeepBytes {
-                stderrBuffer = Data(stderrBuffer.suffix(ClaudeRunnerError.stderrKeepBytes))
+    /// stderr를 Darwin.read로 읽는다(예외를 던지지 않는다). 읽기와 쌓기를 한 잠금 안에서 해 순서를 지킨다.
+    /// drain이 false면 한 번만 읽고, true면 더 읽을 것이 없을 때까지 읽는다. EOF를 만나면 true를 돌려준다.
+    @discardableResult
+    func readStderr(from descriptor: Int32, drain: Bool) -> Bool {
+        stderrReadLock.withLock {
+            var chunk = [UInt8](repeating: 0, count: 4096)
+            while true {
+                let count = chunk.withUnsafeMutableBytes { Darwin.read(descriptor, $0.baseAddress, $0.count) }
+                if count == 0 {
+                    return true
+                }
+                guard count > 0 else {
+                    return false
+                }
+                lock.withLock {
+                    stderrBuffer.append(contentsOf: chunk[..<count])
+                    if stderrBuffer.count > ClaudeRunnerError.stderrKeepBytes {
+                        stderrBuffer = Data(stderrBuffer.suffix(ClaudeRunnerError.stderrKeepBytes))
+                    }
+                }
+                if !drain {
+                    return false
+                }
             }
         }
     }
@@ -307,18 +326,21 @@ public final class ClaudeRunner: @unchecked Sendable {
                     state.receive(data)
                 }
             }
+            let errorDescriptor = errorOutput.fileHandleForReading.fileDescriptor
             errorOutput.fileHandleForReading.readabilityHandler = { handle in
-                let data = handle.availableData
-                if !data.isEmpty {
-                    state.receiveStderr(data)
+                if state.readStderr(from: errorDescriptor, drain: false) {
+                    handle.readabilityHandler = nil
                 }
             }
             process.terminationHandler = { [weak self] terminatedProcess in
                 output.fileHandleForReading.readabilityHandler = nil
                 errorOutput.fileHandleForReading.readabilityHandler = nil
-                // 자식(gradle 등)이 stderr를 물고 있어도 멈추지 않게 남은 stderr는 막지 않고 읽는다.
-                state.receiveStderr(drainWithoutBlocking(errorOutput.fileHandleForReading))
+                // 자식(gradle 등)이 stderr를 물고 있어도 멈추지 않게 남은 stderr는 논블로킹으로 읽는다.
+                let flags = fcntl(errorDescriptor, F_GETFL)
+                _ = fcntl(errorDescriptor, F_SETFL, flags | O_NONBLOCK)
+                state.readStderr(from: errorDescriptor, drain: true)
                 // 핸들러가 꺼지기 전에 읽지 못한 마지막 출력(result 이벤트 등)을 마저 읽는다.
+                // stdout은 EOF까지 막고 읽으므로 자식이 stdout을 물고 있으면 그 자식이 끝날 때까지 기다린다.
                 let rest = output.fileHandleForReading.readDataToEndOfFile()
                 if !rest.isEmpty {
                     state.receive(rest)
@@ -331,10 +353,8 @@ public final class ClaudeRunner: @unchecked Sendable {
                 lock.withLock {
                     self.process = process
                 }
+                // Process는 자식을 자기 프로세스 그룹(pgid = pid)에 두므로 cancel()이 그룹째 끝낼 수 있다.
                 try process.run()
-                // 자식(gradle·adb)까지 한 번에 끝낼 수 있게 자기 프로세스 그룹에 둔다.
-                // Process가 이미 그룹을 만들었거나 exec가 끝났으면 EACCES·ESRCH가 나므로 무시한다.
-                _ = setpgid(process.processIdentifier, process.processIdentifier)
             } catch {
                 output.fileHandleForReading.readabilityHandler = nil
                 errorOutput.fileHandleForReading.readabilityHandler = nil
@@ -381,20 +401,6 @@ public final class ClaudeRunner: @unchecked Sendable {
             Darwin.kill(processIdentifier, SIGKILL)
         }
     }
-}
-
-private func drainWithoutBlocking(_ handle: FileHandle) -> Data {
-    let descriptor = handle.fileDescriptor
-    let flags = fcntl(descriptor, F_GETFL)
-    _ = fcntl(descriptor, F_SETFL, flags | O_NONBLOCK)
-    var data = Data()
-    var chunk = [UInt8](repeating: 0, count: 4096)
-    while true {
-        let count = chunk.withUnsafeMutableBytes { Darwin.read(descriptor, $0.baseAddress, $0.count) }
-        guard count > 0 else { break }
-        data.append(contentsOf: chunk[..<count])
-    }
-    return data
 }
 
 public struct ClaudeRateLimits: Equatable, Sendable {

@@ -13,11 +13,20 @@ public struct EnvFile {
     }
 
     public func presentKeys() -> Set<String> {
+        Set(entries().map(\.key))
+    }
+
+    /// 비어 있지 않은 값만 돌려준다. 화면에 보이기 전에 가릴 때 쓴다.
+    public func values() -> [String] {
+        entries().map(\.value)
+    }
+
+    private func entries() -> [(key: String, value: String)] {
         guard let contents = try? String(contentsOf: url, encoding: .utf8) else {
             return []
         }
 
-        return Set(contents.split(separator: "\n", omittingEmptySubsequences: false).compactMap { line in
+        return contents.split(separator: "\n", omittingEmptySubsequences: false).compactMap { line in
             let line = line.last == "\r" ? line.dropLast() : line[...]
             guard let separator = line.firstIndex(of: "=") else {
                 return nil
@@ -36,8 +45,8 @@ public struct EnvFile {
                 value.removeFirst()
                 value.removeLast()
             }
-            return value.isEmpty ? nil : key
-        })
+            return value.isEmpty ? nil : (key, value)
+        }
     }
 
     public func upsert(key: String, value: String) throws {

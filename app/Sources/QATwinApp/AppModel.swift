@@ -100,6 +100,9 @@ final class AppModel {
     @ObservationIgnored private var runOrchestratorContext: ActiveRun?
     @ObservationIgnored private var stageResultIsError: Bool?
     @ObservationIgnored private var stageResultSummary = ""
+    /// 가리기 전 단계 출력. 계획 경로 찾기 같은 내부 해석에만 쓰고 화면에는 stageLog(가린 것)를 보인다.
+    @ObservationIgnored private var stageRawLog = ""
+    @ObservationIgnored private var stageSecretValues: [String] = []
 
     init() {
         rateLimits = ClaudeRateLimits.read()
@@ -327,7 +330,7 @@ final class AppModel {
                 phase = .reviewing
                 notice = AppNotice(
                     title: "준비 실패",
-                    message: preparationMessage(in: stageResultSummary) ?? "실행 준비 결과를 확인해 주세요."
+                    message: preparationMessage(in: stageResultSummary).map(redactStageText) ?? "실행 준비 결과를 확인해 주세요."
                 )
                 return
             }
@@ -504,7 +507,8 @@ final class AppModel {
             let message = "test(\(project.name)): \(selectedRun.lastPathComponent) 실행 결과"
             let commit = try await shell.run(
                 "/usr/bin/git",
-                ["-C", workspace.root.path, "commit", "-m", message, "--"] + pendingCommitFiles
+                ["-C", workspace.root.path, "commit", "-m", message, "--"] + pendingCommitFiles,
+                timeout: .seconds(60)
             )
             guard commit.status == 0 else { throw shellError(commit.out) }
             let push: (status: Int32, out: String)
@@ -684,6 +688,8 @@ final class AppModel {
         stageWasStopped = false
         stageResultIsError = nil
         stageResultSummary = ""
+        stageRawLog = ""
+        stageSecretValues = selectedProject.map { EnvFile(url: $0.dir.appending(path: ".env")).values() } ?? []
         stageStartedAt = .now
         stageIsRunning = true
         var environment = ["ARTEMIS_HOME": expandedPath(artemisHome)]
@@ -712,7 +718,7 @@ final class AppModel {
             activeStage = nil
             stageFailed = !stageWasStopped
             if !stageWasStopped && !Task.isCancelled {
-                notice = AppNotice(title: "Claude Code 실행 실패", message: error.localizedDescription)
+                notice = AppNotice(title: "Claude Code 실행 실패", message: redactStageText(error.localizedDescription))
             }
             return false
         }
@@ -987,6 +993,9 @@ final class AppModel {
     }
 
     private func appendStageOutput(_ text: String) {
+        if !stageRawLog.isEmpty { stageRawLog += "\n" }
+        stageRawLog += text
+        let text = redactStageText(text)
         if !stageLog.isEmpty { stageLog += "\n" }
         stageLog += text
         stageDecision = text.components(separatedBy: .newlines)
@@ -996,7 +1005,7 @@ final class AppModel {
 
     private func planURLFromStageOutput(for project: ProjectRef) throws -> URL? {
         guard let workspace else { return nil }
-        for line in stageLog.components(separatedBy: .newlines).reversed() {
+        for line in stageRawLog.components(separatedBy: .newlines).reversed() {
             let trimmed = line.trimmingCharacters(in: .whitespaces)
             guard trimmed.hasPrefix("계획:") else { continue }
             let value = String(trimmed.dropFirst("계획:".count))
@@ -1037,6 +1046,11 @@ final class AppModel {
         summary.components(separatedBy: .newlines)
             .last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?
             .trimmingCharacters(in: .whitespaces) == "준비 완료"
+    }
+
+    /// Claude Code에서 온 글을 화면에 보이기 전에 프로젝트 .env 값을 가린다.
+    private func redactStageText(_ text: String) -> String {
+        SecretRedactor.redact(text, values: stageSecretValues)
     }
 
     private func preparationMessage(in summary: String) -> String? {
