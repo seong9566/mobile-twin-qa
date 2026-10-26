@@ -1,0 +1,30 @@
+import SwiftUI
+
+extension Color {
+    static let qaBackground = Color(red: 1, green: 1, blue: 1)
+    static let qaSidebar = Color(red: 0.933, green: 0.941, blue: 0.953)
+    static let qaBar = Color(red: 0.965, green: 0.969, blue: 0.976)
+    static let qaSunken = Color(red: 0.965, green: 0.969, blue: 0.976)
+    static let qaHover = Color(red: 0.894, green: 0.906, blue: 0.925)
+    static let qaLine = Color(red: 0.89, green: 0.898, blue: 0.914)
+    static let qaStrongLine = Color(red: 0.812, green: 0.827, blue: 0.851)
+    static let qaText = Color(red: 0.106, green: 0.114, blue: 0.129)
+    static let qaSecondaryText = Color(red: 0.329, green: 0.353, blue: 0.388)
+    static let qaTertiaryText = Color(red: 0.365, green: 0.388, blue: 0.424)
+    static let qaAccent = Color(red: 0.039, green: 0.392, blue: 0.847)
+    static let qaAccentWeak = Color(red: 0.906, green: 0.937, blue: 0.984)
+    static let qaAccentInk = Color(red: 0.039, green: 0.29, blue: 0.639)
+    static let qaPass = Color(red: 0.11, green: 0.478, blue: 0.239)
+    static let qaPassWeak = Color(red: 0.894, green: 0.953, blue: 0.914)
+    static let qaFail = Color(red: 0.706, green: 0.137, blue: 0.094)
+    static let qaFailWeak = Color(red: 0.988, green: 0.922, blue: 0.914)
+    static let qaHold = Color(red: 0.561, green: 0.29, blue: 0)
+    static let qaHoldWeak = Color(red: 0.984, green: 0.933, blue: 0.859)
+    static let qaTapeHold = Color(red: 0.761, green: 0.478, blue: 0.102)
+    static let qaWarn = Color(red: 0.478, green: 0.31, blue: 0)
+    static let qaWarnWeak = Color(red: 1, green: 0.961, blue: 0.851)
+    static let qaWarnLine = Color(red: 0.937, green: 0.831, blue: 0.541)
+    static let qaIdle = Color(red: 0.827, green: 0.843, blue: 0.867)
+    static let qaDone = Color(red: 0.498, green: 0.651, blue: 0.851)
+}
+
