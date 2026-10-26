@@ -9,23 +9,43 @@ struct ResultsView: View {
     let runDir: URL
 
     var body: some View {
-        VStack(spacing: 0) {
-            summary
-            Divider()
-            HStack(spacing: 0) {
-                resultList
-                    .frame(width: 300)
-                Divider()
-                if let selectedResult {
-                    ResultCard(appModel: appModel, result: selectedResult, runDir: runDir)
-                } else {
-                    ContentUnavailableView("결과 없음", systemImage: "doc.text.magnifyingglass")
-                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        Group {
+            if appModel.runResults == nil {
+                ContentUnavailableView {
+                    Label("판정 결과가 없어요", systemImage: "doc.text.magnifyingglass")
+                } description: {
+                    Text("실행 기록이 있으면 판정을 다시 할 수 있어요.")
+                } actions: {
+                    if hasRunState {
+                        Button("판정 다시 하기") {
+                            Task { await appModel.retryJudgment() }
+                        }
+                    }
+                }
+            } else {
+                VStack(spacing: 0) {
+                    summary
+                    Divider()
+                    HStack(spacing: 0) {
+                        resultList
+                            .frame(width: 300)
+                        Divider()
+                        if let selectedResult {
+                            ResultCard(appModel: appModel, result: selectedResult, runDir: runDir)
+                        } else {
+                            ContentUnavailableView("결과 없음", systemImage: "doc.text.magnifyingglass")
+                                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        }
+                    }
+                    Divider()
+                    statusBar
                 }
             }
-            Divider()
-            statusBar
         }
+    }
+
+    private var hasRunState: Bool {
+        FileManager.default.fileExists(atPath: runDir.appending(path: "run-state.json").path)
     }
 
     private var summary: some View {

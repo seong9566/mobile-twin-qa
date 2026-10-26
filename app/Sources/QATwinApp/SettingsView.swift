@@ -21,6 +21,9 @@ struct SettingsView: View {
             LabeledContent("Artemis 주소") {
                 TextField("http://127.0.0.1:8100", text: binding(\.artemisURL))
             }
+            LabeledContent("adb 경로") {
+                TextField("비워 두면 기본 설치 경로에서 찾음", text: binding(\.adbPath))
+            }
             LabeledContent("claude 경로") {
                 TextField("~/.local/bin/claude", text: binding(\.claudePath))
             }

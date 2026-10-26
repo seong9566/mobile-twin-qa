@@ -24,6 +24,69 @@ public struct ScenarioResult: Codable, Identifiable, Equatable {
     public var actual: String?
     public var reason: String?
     public var evidence: [String]
+
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case title
+        case outcome
+        case rawOutcome
+        case cause
+        case rawCause
+        case expected
+        case actual
+        case reason
+        case evidence
+    }
+
+    public init(
+        id: String,
+        title: String?,
+        outcome: Outcome?,
+        rawOutcome: String?,
+        cause: Cause?,
+        rawCause: String?,
+        expected: String?,
+        actual: String?,
+        reason: String?,
+        evidence: [String]
+    ) {
+        self.id = id
+        self.title = title
+        self.outcome = outcome
+        self.rawOutcome = rawOutcome
+        self.cause = cause
+        self.rawCause = rawCause
+        self.expected = expected
+        self.actual = actual
+        self.reason = reason
+        self.evidence = evidence
+    }
+
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        id = try values.decode(String.self, forKey: .id)
+        title = try values.decodeIfPresent(String.self, forKey: .title)
+        let outcomeValue = try values.decodeIfPresent(String.self, forKey: .outcome)
+        outcome = outcomeValue.flatMap(Outcome.init(rawValue:))
+        if outcome == nil {
+            let storedRawOutcome = try values.decodeIfPresent(String.self, forKey: .rawOutcome)
+            rawOutcome = outcomeValue ?? storedRawOutcome
+        } else {
+            rawOutcome = nil
+        }
+        let causeValue = try values.decodeIfPresent(String.self, forKey: .cause)
+        cause = causeValue.flatMap(Cause.init(rawValue:))
+        if cause == nil {
+            let storedRawCause = try values.decodeIfPresent(String.self, forKey: .rawCause)
+            rawCause = causeValue ?? storedRawCause
+        } else {
+            rawCause = nil
+        }
+        expected = try values.decodeIfPresent(String.self, forKey: .expected)
+        actual = try values.decodeIfPresent(String.self, forKey: .actual)
+        reason = try values.decodeIfPresent(String.self, forKey: .reason)
+        evidence = try values.decodeIfPresent([String].self, forKey: .evidence) ?? []
+    }
 }
 
 public struct RunResults: Codable {

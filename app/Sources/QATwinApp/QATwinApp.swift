@@ -107,28 +107,31 @@ struct QATwinApp: App {
         }
 
         ToolbarItemGroup(placement: .primaryAction) {
-            if case .stage = appModel.phase {
+            if appModel.activeStage != nil {
                 Button("중지", systemImage: "stop") { appModel.cancelStage() }
                     .buttonStyle(.glass)
                     .foregroundStyle(Color.qaFail)
-                    .disabled(!appModel.stageIsRunning)
             }
             if appModel.phase == .reviewing {
                 Button("저장") { appModel.savePlan() }
                     .buttonStyle(.glass)
                     .disabled(appModel.editedScenarioIDs.isEmpty)
-                Button("실행 준비…") { appModel.isApprovalPresented = true }
+                Button("실행 준비…") { appModel.presentApproval() }
                     .buttonStyle(.glassProminent)
-                    .disabled(appModel.includedScenarioIDs.isEmpty)
+                    .disabled(
+                        appModel.includedScenarioIDs.isEmpty
+                            || appModel.activeRun != nil
+                            || appModel.activeStage != nil
+                    )
             }
-            if case .running = appModel.phase {
+            if appModel.activeRun != nil, appModel.activeStage == nil {
                 Button("전체 중지…", systemImage: "stop") {
                     isStopConfirmationPresented = true
                 }
                 .buttonStyle(.glass)
                 .foregroundStyle(Color.qaFail)
             }
-            if case .results = appModel.phase {
+            if case .results = appModel.phase, appModel.runResults != nil {
                 Button("수정 요청 md 만들기 (\(appModel.includedResultCount))") {
                     appModel.isFixRequestPresented = true
                 }
@@ -237,13 +240,7 @@ final class QATwinApplicationDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let appModel else { return .terminateNow }
-        let isRunning: Bool
-        if case .running = appModel.phase {
-            isRunning = true
-        } else {
-            isRunning = appModel.stageIsRunning
-        }
-        guard isRunning else { return .terminateNow }
+        guard appModel.activeRun != nil || appModel.activeStage != nil else { return .terminateNow }
         let alert = NSAlert()
         alert.messageText = "실행을 중지하고 종료할까요?"
         alert.informativeText = "진행 중인 Artemis 세션과 Claude Code를 중지한 뒤 종료해요."

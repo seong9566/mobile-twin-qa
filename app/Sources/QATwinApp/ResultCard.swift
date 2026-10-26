@@ -231,7 +231,10 @@ struct ResultCard: View {
     }
 
     private var canRetry: Bool {
-        guard result.outcome == .hold, appModel.effectiveCause(for: result) == .environment else { return false }
+        guard result.outcome == .hold,
+              appModel.effectiveCause(for: result) == .environment,
+              appModel.canRetry(in: runDir)
+        else { return false }
         return !FileManager.default.fileExists(
             atPath: runDir.appending(path: "artifacts/\(result.id)/try1").path
         )

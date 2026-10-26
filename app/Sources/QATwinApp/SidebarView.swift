@@ -7,12 +7,19 @@ struct SidebarView: View {
 
     var body: some View {
         VStack(spacing: 8) {
+            if hasActiveExecution {
+                Text("실행 중에는 다른 화면으로 갈 수 없어요")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.qaSecondaryText)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
             Button {
                 chooseSourceFolder()
             } label: {
                 Label("앱 소스 폴더 열기…", systemImage: "plus")
                     .frame(maxWidth: .infinity)
             }
+            .disabled(hasActiveExecution)
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 2) {
@@ -20,6 +27,7 @@ struct SidebarView: View {
                     projectSection(.personal, title: "개인")
                 }
             }
+            .disabled(hasActiveExecution)
 
             Divider()
             ClaudeRateLimitView(limits: appModel.rateLimits, compact: true)
@@ -31,6 +39,10 @@ struct SidebarView: View {
                 try? await Task.sleep(for: .seconds(60))
             }
         }
+    }
+
+    private var hasActiveExecution: Bool {
+        appModel.activeRun != nil || appModel.activeStage != nil
     }
 
     @ViewBuilder

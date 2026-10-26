@@ -32,7 +32,7 @@ cat > "$BUNDLE_DIR/Contents/Info.plist" <<'PLIST'
     <key>CFBundleVersion</key>
     <string>1</string>
     <key>LSMinimumSystemVersion</key>
-    <string>27.0</string>
+    <string>26.0</string>
 </dict>
 </plist>
 PLIST

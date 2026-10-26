@@ -11,6 +11,26 @@ private func fixtureRun(_ name: String) -> URL {
     #expect(results.scenarios.first?.outcome == .fail && results.scenarios.first?.cause == .appDefect)
 }
 
+@Test func loadsUnknownOutcomeCauseAndMissingOptionalFields() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(
+        path: "QATwinCoreRunResultsTests-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let json = """
+    {"schemaVersion":1,"plan":"personal/demo/plans/a.md","scenarios":[
+      {"id":"HOME-01","outcome":"판정 보류","cause":"—"}
+    ]}
+    """
+    try json.write(to: directory.appending(path: "results.json"), atomically: true, encoding: .utf8)
+
+    let scenario = try #require(RunResults.load(runDir: directory).scenarios.first)
+    #expect(scenario.outcome == nil && scenario.rawOutcome == "판정 보류")
+    #expect(scenario.cause == nil && scenario.rawCause == "—")
+    #expect(scenario.title == nil && scenario.expected == nil && scenario.evidence.isEmpty)
+}
+
 @Test func legacySummaryKeepsIrregularValues() throws {
     let results = try RunResults.load(runDir: fixtureRun("2026-01-02-1000"))
     let scenario = results.scenarios.first { $0.id == "SET-01" }!

@@ -161,6 +161,9 @@ public struct Workspace: Sendable {
             options: [.skipsHiddenFiles]
         )
         .filter(predicate)
-        .sorted { $0.lastPathComponent > $1.lastPathComponent }
+        .sorted {
+            $0.deletingPathExtension().lastPathComponent
+                > $1.deletingPathExtension().lastPathComponent
+        }
     }
 }

@@ -12,6 +12,7 @@ private final class FakeArtemisAPI: ArtemisAPI, @unchecked Sendable {
     private let usageResponses: [String: Usage]
     private var runCalls: [String] = []
     private var saveCalls: [(sessionID: String, path: String)] = []
+    private let saveDelay: Duration?
     private var stopCalls: [String] = []
 
     init(
@@ -20,11 +21,13 @@ private final class FakeArtemisAPI: ArtemisAPI, @unchecked Sendable {
         states: [String: [SessionState]],
         usage: [String: Usage] = [:],
         runErrors: [String: ArtemisError] = [:],
-        stateFailures: [String: Int] = [:]
+        stateFailures: [String: Int] = [:],
+        saveDelay: Duration? = nil
     ) {
         self.goalIDs = goalIDs
         self.stateFailures = stateFailures
         self.runErrors = runErrors
+        self.saveDelay = saveDelay
         self.sessionIDs = sessionIDs
         self.stateResponses = states
         self.usageResponses = usage
@@ -77,10 +80,14 @@ private final class FakeArtemisAPI: ArtemisAPI, @unchecked Sendable {
     }
 
     func saveArtifacts(_ sid: String, to dir: URL) async throws -> Bool {
-        withLock {
+        let result = withLock {
             saveCalls.append((sid, dir.path))
             return true
         }
+        if let saveDelay {
+            try await Task.sleep(for: saveDelay)
+        }
+        return result
     }
 
     func runs() async -> [String] {
@@ -143,7 +150,8 @@ private func makeOrchestrator(
     runDir: URL,
     plan: PlanDocument,
     scenarios: [Scenario],
-    artemisHome: URL
+    artemisHome: URL,
+    adbPath: String? = "/test/adb"
 ) -> RunOrchestrator {
     RunOrchestrator(
         api: api,
@@ -153,8 +161,10 @@ private func makeOrchestrator(
         scenarios: scenarios,
         deviceSerial: "DEMO1",
         server: "local",
+        planRelativePath: "personal/demo_app/plans/2026-01-02-demo_app_test_plan.md",
         artemisHome: artemisHome,
         tracesDir: nil,
+        adbPath: adbPath,
         pollInterval: .milliseconds(1)
     )
 }
@@ -215,9 +225,10 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
     #expect(saves.map(\.sessionID) == ["S1", "S2", "S3"])
     #expect(saves[0].path.hasSuffix("/artifacts/HOME-01"))
     let shellCalls = await shell.recordedCalls()
-    #expect(shellCalls.first?.exe == "/usr/bin/env")
-    #expect(shellCalls.first?.args == ["adb", "-s", "DEMO1", "shell", "cmd", "wifi", "status"])
+    #expect(shellCalls.first?.exe == "/test/adb")
+    #expect(shellCalls.first?.args == ["-s", "DEMO1", "shell", "cmd", "wifi", "status"])
     let state = try readRunState(directory)
+    #expect(state.plan == "personal/demo_app/plans/2026-01-02-demo_app_test_plan.md")
     #expect(state.states["HOME-01"] == .finished(sessionID: "S1", artemis: "completed"))
     #expect(state.usage == Usage(llm_calls: 6, prompt_tokens: 60, completion_tokens: 6))
 }
@@ -505,7 +516,7 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
     #expect(await api.stops().isEmpty)
 }
 
-@Test func repeatedPollFailureStopsAndHolds() async throws {
+@Test func repeatedPollFailureWarnsAndContinues() async throws {
     let plan = try fixtureDocument()
     let scenarios = [plan.scenarios[0]]
     let directory = try orchestratorTempDir()
@@ -526,8 +537,158 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
     let events = Task { await collectUntilFinished(orchestrator.events) }
 
     await orchestrator.start()
-    _ = await events.value
+    let received = await events.value
 
-    #expect(try readRunState(directory).states["HOME-01"] == .held(reason: "Artemis 응답 없음"))
-    #expect(await api.stops() == ["S1"])
+    #expect(try readRunState(directory).states["HOME-01"] == .finished(sessionID: "S1", artemis: "completed"))
+    #expect(received.filter { $0 == .pollFailing(id: "HOME-01", reason: "Artemis 응답 없음") }.count == 1)
+    #expect(await api.stops().isEmpty)
+}
+
+@Test func stopRequestedDuringArtifactSaveDoesNotHoldNextScenario() async throws {
+    let plan = try fixtureDocument()
+    var first = plan.scenarios[0]
+    var second = plan.scenarios[2]
+    first.dependsOn = []
+    second.dependsOn = []
+    let scenarios = [first, second]
+    let directory = try orchestratorTempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let api = FakeArtemisAPI(
+        goalIDs: goalIDs(scenarios),
+        sessionIDs: ["HOME-01": "S1", "SET-01": "S2"],
+        states: ["S1": [.completed], "S2": [.completed]],
+        saveDelay: .milliseconds(20)
+    )
+    let orchestrator = makeOrchestrator(
+        api: api,
+        runDir: directory,
+        plan: plan,
+        scenarios: scenarios,
+        artemisHome: directory
+    )
+    let run = Task { await orchestrator.start() }
+
+    while await api.saves().isEmpty {
+        try await Task.sleep(for: .milliseconds(1))
+    }
+    await orchestrator.stopCurrentAsHeld()
+    await run.value
+
+    #expect(await api.runs() == ["HOME-01", "SET-01"])
+    #expect(try readRunState(directory).states["SET-01"] == .finished(sessionID: "S2", artemis: "completed"))
+}
+
+@Test func retryEarlyReturnStillFinishesStream() async throws {
+    let plan = try fixtureDocument()
+    let directory = try orchestratorTempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let api = FakeArtemisAPI(goalIDs: [:], sessionIDs: [:], states: [:])
+    let orchestrator = makeOrchestrator(
+        api: api,
+        runDir: directory,
+        plan: plan,
+        scenarios: [plan.scenarios[0]],
+        artemisHome: directory
+    )
+    let events = Task { await collectUntilFinished(orchestrator.events) }
+
+    await orchestrator.retry(id: "UNKNOWN-99")
+
+    #expect(await events.value == [.finished])
+}
+
+@Test func rearmStallRestartsFrozenLogTimer() async throws {
+    let plan = try fixtureDocument()
+    let scenarios = [plan.scenarios[0]]
+    let directory = try orchestratorTempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let log = StallDetector.traceLog(sessionID: "S1", artemisHome: directory, tracesDir: nil)
+    try FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try "running".write(to: log, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes(
+        [.modificationDate: Date().addingTimeInterval(-301)],
+        ofItemAtPath: log.path
+    )
+    let api = FakeArtemisAPI(
+        goalIDs: goalIDs(scenarios),
+        sessionIDs: ["HOME-01": "S1"],
+        states: ["S1": Array(repeating: .running, count: 8) + [.completed]]
+    )
+    let orchestrator = makeOrchestrator(
+        api: api,
+        runDir: directory,
+        plan: plan,
+        scenarios: scenarios,
+        artemisHome: directory
+    )
+    let events = Task {
+        var received: [RunEvent] = []
+        for await event in orchestrator.events {
+            received.append(event)
+            if case .stall(let id, _) = event {
+                await orchestrator.rearmStall(id: id)
+            }
+            if event == .finished { break }
+        }
+        return received
+    }
+
+    await orchestrator.start()
+    let received = await events.value
+
+    #expect(received.filter { if case .stall = $0 { true } else { false } }.count == 1)
+}
+
+@Test func missingTraceLogWarnsOnceAfterSixRunningPolls() async throws {
+    let plan = try fixtureDocument()
+    let scenarios = [plan.scenarios[0]]
+    let directory = try orchestratorTempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let api = FakeArtemisAPI(
+        goalIDs: goalIDs(scenarios),
+        sessionIDs: ["HOME-01": "S1"],
+        states: ["S1": Array(repeating: .running, count: 7) + [.completed]]
+    )
+    let orchestrator = makeOrchestrator(
+        api: api,
+        runDir: directory,
+        plan: plan,
+        scenarios: scenarios,
+        artemisHome: directory
+    )
+    let events = Task { await collectUntilFinished(orchestrator.events) }
+
+    await orchestrator.start()
+    let received = await events.value
+
+    #expect(received.filter { $0 == .traceLogMissing(id: "HOME-01") }.count == 1)
+}
+
+@Test func missingADBWarnsAndSkipsWifiCommand() async throws {
+    let plan = try fixtureDocument()
+    let scenarios = [plan.scenarios[0]]
+    let directory = try orchestratorTempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let api = FakeArtemisAPI(
+        goalIDs: goalIDs(scenarios),
+        sessionIDs: ["HOME-01": "S1"],
+        states: ["S1": [.running, .completed]]
+    )
+    let shell = FakeShellRunner()
+    let orchestrator = makeOrchestrator(
+        api: api,
+        shell: shell,
+        runDir: directory,
+        plan: plan,
+        scenarios: scenarios,
+        artemisHome: directory,
+        adbPath: nil
+    )
+    let events = Task { await collectUntilFinished(orchestrator.events) }
+
+    await orchestrator.start()
+    let received = await events.value
+
+    #expect(received.filter { $0 == .adbUnavailable(id: "HOME-01") }.count == 1)
+    #expect(await shell.recordedCalls().isEmpty)
 }

@@ -5,10 +5,18 @@ import QATwinCore
 import SwiftUI
 
 struct Approval {
+    var buildInstall: Bool
     var deviceSerial: String
     var server: String
     var scenarioIDs: [String]
     var screenshotApproved: Bool
+}
+
+struct ActiveRun {
+    let runDir: URL
+    let project: ProjectRef
+    let plan: PlanDocument
+    let scenarioIDs: [String]
 }
 
 enum AppPhase: Equatable {
@@ -32,6 +40,7 @@ final class AppModel {
     @ObservationIgnored @AppStorage("artemisHome") var artemisHome = "~/Desktop/workspace/artemis"
     @ObservationIgnored @AppStorage("artemisTracesDir") var artemisTracesDir = ""
     @ObservationIgnored @AppStorage("artemisURL") var artemisURL = "http://127.0.0.1:8100"
+    @ObservationIgnored @AppStorage("adbPath") var adbPath = ""
     @ObservationIgnored @AppStorage("claudePath") var claudePath = ""
 
     var workspace: Workspace?
@@ -40,6 +49,8 @@ final class AppModel {
     var selectedPlan: PlanDocument?
     var selectedRun: URL?
     var phase: AppPhase = .empty
+    var activeRun: ActiveRun?
+    var activeStage: Stage?
     var orderedScenarios: [Scenario] = []
     var includedScenarioIDs: Set<String> = []
     var selectedScenarioID: String?
@@ -53,6 +64,8 @@ final class AppModel {
     var stageCost: Double?
     var stageStartedAt: Date?
     var stageIsRunning = false
+    var stageWasStopped = false
+    var stageFailed = false
     var rateLimits: ClaudeRateLimits?
     var runEvents: [RunEvent] = []
     var runStates: [String: ScenarioRunState] = [:]
@@ -63,6 +76,9 @@ final class AppModel {
     var runStartedAt: [String: Date] = [:]
     var runFinishedAt: [String: Date] = [:]
     var stallSignals: [String: StallSignal] = [:]
+    var pollFailureReasons: [String: String] = [:]
+    var traceLogMissingScenarioIDs: Set<String> = []
+    var adbUnavailableScenarioIDs: Set<String> = []
     var wifiDownScenarioIDs: Set<String> = []
     var humanActionNotes: [String: String] = [:]
     var spendLimitReached = false
@@ -80,6 +96,9 @@ final class AppModel {
     @ObservationIgnored private var isTerminating = false
     @ObservationIgnored private var reviewSaveTask: Task<Void, Never>?
     @ObservationIgnored private var runOrchestrator: RunOrchestrator?
+    @ObservationIgnored private var runOrchestratorContext: ActiveRun?
+    @ObservationIgnored private var stageResultIsError: Bool?
+    @ObservationIgnored private var stageResultSummary = ""
 
     init() {
         rateLimits = ClaudeRateLimits.read()
@@ -194,7 +213,7 @@ final class AppModel {
         do {
             try loadResults(from: url)
         } catch {
-            notice = AppNotice(title: "결과를 열지 못했어요", message: error.localizedDescription)
+            showEmptyResults(for: url)
         }
     }
 
@@ -223,13 +242,14 @@ final class AppModel {
         editedScenarioIDs.insert(scenario.id)
     }
 
-    func savePlan() {
-        guard let workspace, let project = selectedProject, let plan = selectedPlan else { return }
+    @discardableResult
+    func savePlan() -> Bool {
+        guard let workspace, let project = selectedProject, let plan = selectedPlan else { return false }
         do {
             let hasRuns = try !workspace.runs(of: project, plan: plan.url).isEmpty
             guard let target = PlanSaveTarget.resolve(plan: plan.url, hasRuns: hasRuns, now: .now) else {
                 notice = AppNotice(title: "저장할 수 없어요", message: "같은 이름의 계획 파일이 이미 있어요. 잠시 뒤 다시 저장해 주세요.")
-                return
+                return false
             }
             let included = includedScenarioIDs
             let order = orderedScenarios.map(\.id)
@@ -245,9 +265,18 @@ final class AppModel {
             selectedScenarioID = selection
             editedScenarioIDs = []
             phase = .reviewing
+            return true
         } catch {
             show(error)
+            return false
         }
+    }
+
+    func presentApproval() {
+        if !editedScenarioIDs.isEmpty, !savePlan() {
+            return
+        }
+        isApprovalPresented = true
     }
 
     func moveScenario(_ sourceID: String, before targetID: String) {
@@ -269,6 +298,13 @@ final class AppModel {
         Notifier.requestAuthorization()
         do {
             let runDir = try makeRunDirectory(workspace: workspace, project: project, plan: plan.url)
+            let context = ActiveRun(
+                runDir: runDir,
+                project: project,
+                plan: plan,
+                scenarioIDs: approval.scenarioIDs
+            )
+            activeRun = context
             let prompt = StagePrompt.prepare(
                 project: project,
                 plan: relativePath(plan.url, from: workspace.root),
@@ -276,14 +312,21 @@ final class AppModel {
                 deviceSerial: approval.deviceSerial,
                 server: approval.server,
                 scenarioIDs: approval.scenarioIDs,
+                buildInstall: approval.buildInstall,
                 screenshotApproved: approval.screenshotApproved
             )
             let succeeded = await runStage(.prepare, prompt: prompt)
-            guard succeeded else { return }
-            let output = stageLog
-            guard output.contains("준비 완료") else {
+            guard succeeded else {
+                activeRun = nil
+                return
+            }
+            guard preparationSucceeded(stageResultSummary) else {
+                activeRun = nil
                 phase = .reviewing
-                notice = AppNotice(title: "준비 실패", message: preparationFailure(in: output) ?? "실행 준비 결과를 확인해 주세요.")
+                notice = AppNotice(
+                    title: "준비 실패",
+                    message: preparationMessage(in: stageResultSummary) ?? "실행 준비 결과를 확인해 주세요."
+                )
                 return
             }
             selectedRun = runDir
@@ -299,9 +342,11 @@ final class AppModel {
                 server: approval.server
             )
             runOrchestrator = orchestrator
+            runOrchestratorContext = context
             phase = .running(runDir: runDir)
             await consumeRun(orchestrator, starting: { await orchestrator.start() }, runDir: runDir)
         } catch {
+            activeRun = nil
             phase = .reviewing
             show(error)
         }
@@ -326,8 +371,9 @@ final class AppModel {
         claudeRunner?.cancel()
     }
 
-    func keepWaiting(id: String) {
+    func keepWaiting(id: String) async {
         stallSignals.removeValue(forKey: id)
+        await runOrchestrator?.rearmStall(id: id)
     }
 
     func refreshCurrentArtemisLog() {
@@ -466,17 +512,60 @@ final class AppModel {
     }
 
     func retryScenario(_ id: String) async {
-        guard let orchestrator = runOrchestrator, let runDir = selectedRun else {
+        guard let orchestrator = runOrchestrator,
+              let context = runOrchestratorContext,
+              selectedRun?.standardizedFileURL == context.runDir.standardizedFileURL,
+              orchestrator.runDir.standardizedFileURL == context.runDir.standardizedFileURL
+        else {
             notice = AppNotice(title: "다시 돌릴 수 없어요", message: "이 앱 실행 중에 만든 결과에서만 다시 돌릴 수 있어요.")
             return
         }
-        phase = .running(runDir: runDir)
-        await consumeRun(orchestrator, starting: { await orchestrator.retry(id: id) }, runDir: runDir)
+        activeRun = context
+        phase = .running(runDir: context.runDir)
+        await consumeRun(
+            orchestrator,
+            starting: { await orchestrator.retry(id: id) },
+            runDir: context.runDir
+        )
+    }
+
+    func canRetry(in runDir: URL) -> Bool {
+        guard let orchestrator = runOrchestrator else { return false }
+        return orchestrator.runDir.standardizedFileURL == runDir.standardizedFileURL
+    }
+
+    func retryJudgment() async {
+        guard let selectedRun, let context = runContext(for: selectedRun) else { return }
+        activeRun = context
+        let started = Date.now
+        let succeeded = await runStage(
+            .judge,
+            prompt: StagePrompt.judge(
+                project: context.project,
+                plan: workspace.map { relativePath(context.plan.url, from: $0.root) } ?? context.plan.url.path,
+                runDir: workspace.map { relativePath(context.runDir, from: $0.root) } ?? context.runDir.path
+            )
+        )
+        judgeDuration = Date.now.timeIntervalSince(started)
+        if succeeded {
+            do {
+                try loadResults(from: context.runDir)
+            } catch {
+                showEmptyResults(for: context.runDir)
+            }
+        } else {
+            clearResults()
+        }
+        activeRun = nil
     }
 
     func cancelStage() {
+        stageWasStopped = true
         claudeRunner?.cancel()
-        stageIsRunning = false
+    }
+
+    func returnFromStage() {
+        phase = selectedPlan == nil ? .empty : .reviewing
     }
 
     func refreshRateLimits() {
@@ -576,10 +665,15 @@ final class AppModel {
 
     private func runStage(_ stage: Stage, prompt: String) async -> Bool {
         guard let workspace else { return false }
+        activeStage = stage
         phase = .stage(stage)
         stageLog = ""
         stageDecision = nil
         stageCost = nil
+        stageFailed = false
+        stageWasStopped = false
+        stageResultIsError = nil
+        stageResultSummary = ""
         stageStartedAt = .now
         stageIsRunning = true
         var environment = ["ARTEMIS_HOME": expandedPath(artemisHome)]
@@ -598,11 +692,16 @@ final class AppModel {
             }
             stageIsRunning = false
             claudeRunner = nil
-            return true
+            activeStage = nil
+            let succeeded = !stageWasStopped && stageResultIsError == false
+            stageFailed = !stageWasStopped && !succeeded
+            return succeeded
         } catch {
             stageIsRunning = false
             claudeRunner = nil
-            if !Task.isCancelled {
+            activeStage = nil
+            stageFailed = !stageWasStopped
+            if !stageWasStopped && !Task.isCancelled {
                 notice = AppNotice(title: "Claude Code 실행 실패", message: error.localizedDescription)
             }
             return false
@@ -617,8 +716,7 @@ final class AppModel {
     }
 
     private var hasActiveExecution: Bool {
-        if case .running = phase { return true }
-        return stageIsRunning
+        activeRun != nil || activeStage != nil
     }
 
     private var currentSessionID: String? {
@@ -636,6 +734,9 @@ final class AppModel {
         runFinishedAt = [:]
         runScenarioCalls = [:]
         stallSignals = [:]
+        pollFailureReasons = [:]
+        traceLogMissingScenarioIDs = []
+        adbUnavailableScenarioIDs = []
         wifiDownScenarioIDs = []
         humanActionNotes = [:]
         spendLimitReached = false
@@ -657,10 +758,12 @@ final class AppModel {
             scenarios: scenarios,
             deviceSerial: deviceSerial,
             server: server,
+            planRelativePath: workspace.map { relativePath(plan.url, from: $0.root) } ?? plan.url.path,
             artemisHome: URL(fileURLWithPath: expandedPath(artemisHome)),
             tracesDir: artemisTracesDir.isEmpty
                 ? nil
-                : URL(fileURLWithPath: expandedPath(artemisTracesDir))
+                : URL(fileURLWithPath: expandedPath(artemisTracesDir)),
+            adbPath: resolvedADBPath()
         )
     }
 
@@ -676,26 +779,33 @@ final class AppModel {
         }
         await operationTask.value
         guard !isTerminating else {
+            activeRun = nil
             phase = .empty
             return
         }
-        guard let project = selectedProject, let plan = selectedPlan else { return }
+        guard let context = activeRun,
+              context.runDir.standardizedFileURL == runDir.standardizedFileURL
+        else { return }
         let started = Date.now
-        _ = await runStage(
+        let succeeded = await runStage(
             .judge,
             prompt: StagePrompt.judge(
-                project: project,
-                plan: workspace.map { relativePath(plan.url, from: $0.root) } ?? plan.url.path,
+                project: context.project,
+                plan: workspace.map { relativePath(context.plan.url, from: $0.root) } ?? context.plan.url.path,
                 runDir: workspace.map { relativePath(runDir, from: $0.root) } ?? runDir.path
             )
         )
         judgeDuration = Date.now.timeIntervalSince(started)
-        do {
-            try loadResults(from: runDir)
-        } catch {
-            phase = .results(runDir: runDir)
-            show(error)
+        if succeeded {
+            do {
+                try loadResults(from: context.runDir)
+            } catch {
+                showEmptyResults(for: context.runDir)
+            }
+        } else {
+            clearResults()
         }
+        activeRun = nil
     }
 
     private func handle(_ event: RunEvent) {
@@ -723,6 +833,14 @@ final class AppModel {
         case .stall(let id, let signal):
             stallSignals[id] = signal
             Notifier.send(title: "\(id): 멈춤 의심", body: stallDescription(signal))
+        case .pollFailing(let id, let reason):
+            pollFailureReasons[id] = reason
+        case .pollRecovered(let id):
+            pollFailureReasons.removeValue(forKey: id)
+        case .traceLogMissing(let id):
+            traceLogMissingScenarioIDs.insert(id)
+        case .adbUnavailable(let id):
+            adbUnavailableScenarioIDs.insert(id)
         case .wifiDown(let id):
             wifiDownScenarioIDs.insert(id)
             Notifier.send(title: "\(id): Wi-Fi 끊김", body: "고친 뒤 끝나면 다시 돌릴 수 있어요.")
@@ -749,6 +867,44 @@ final class AppModel {
         selectedResultID = loaded.scenarios.first(where: { $0.outcome != .pass })?.id
             ?? loaded.scenarios.first?.id
         phase = .results(runDir: runDir)
+    }
+
+    private func showEmptyResults(for runDir: URL) {
+        clearResults()
+        selectedRun = runDir
+        phase = .results(runDir: runDir)
+    }
+
+    private func clearResults() {
+        runResults = nil
+        runTotals = nil
+        review = Review()
+        selectedResultID = nil
+    }
+
+    private func runContext(for runDir: URL) -> ActiveRun? {
+        guard let workspace,
+              let data = try? Data(contentsOf: runDir.appending(path: "run-state.json")),
+              let state = try? JSONDecoder().decode(RunStateFile.self, from: data)
+        else {
+            return nil
+        }
+        let planURL = state.plan.hasPrefix("/")
+            ? URL(fileURLWithPath: state.plan)
+            : workspace.root.appending(path: state.plan)
+        guard let plan = try? PlanDocument.load(planURL),
+              let project = projects.first(where: {
+                  planURL.standardizedFileURL.path.hasPrefix($0.dir.standardizedFileURL.path + "/")
+              })
+        else {
+            return nil
+        }
+        return ActiveRun(
+            runDir: runDir,
+            project: project,
+            plan: plan,
+            scenarioIDs: state.order
+        )
     }
 
     private func result(id: String) -> ScenarioResult? {
@@ -810,8 +966,10 @@ final class AppModel {
             appendStageOutput(text)
         case .tool:
             break
-        case .result(_, let costUSD, let summary):
+        case .result(let isError, let costUSD, let summary):
             stageCost = costUSD
+            stageResultIsError = isError
+            stageResultSummary = summary
             appendStageOutput(summary)
         case .rateLimits(let limits):
             rateLimits = limits
@@ -865,15 +1023,35 @@ final class AppModel {
         return path.hasPrefix(rootPath) ? String(path.dropFirst(rootPath.count)) : path
     }
 
-    private func preparationFailure(in output: String) -> String? {
-        output.components(separatedBy: .newlines)
-            .last(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("준비 실패") })?
-            .trimmingCharacters(in: .whitespaces)
+    private func preparationSucceeded(_ summary: String) -> Bool {
+        summary.components(separatedBy: .newlines)
+            .last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?
+            .trimmingCharacters(in: .whitespaces) == "준비 완료"
+    }
+
+    private func preparationMessage(in summary: String) -> String? {
+        summary.components(separatedBy: .newlines)
+            .reversed()
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .first { $0.hasPrefix("준비 실패:") || $0.hasPrefix("결정 필요:") }
     }
 
     private func resolvedClaudeURL() -> URL {
         let path = claudePath.isEmpty ? "~/.local/bin/claude" : claudePath
         return URL(fileURLWithPath: expandedPath(path))
+    }
+
+    private func resolvedADBPath() -> String? {
+        let candidates = adbPath.isEmpty
+            ? [
+                "~/Library/Android/sdk/platform-tools/adb",
+                "/opt/homebrew/bin/adb",
+                "/usr/local/bin/adb",
+            ]
+            : [adbPath]
+        return candidates
+            .map(expandedPath)
+            .first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
     private func expandedPath(_ path: String) -> String {

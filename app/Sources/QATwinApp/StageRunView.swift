@@ -19,6 +19,15 @@ struct StageRunView: View {
                             .lineSpacing(4)
                     }
 
+                    if !appModel.stageIsRunning,
+                       appModel.stageWasStopped || appModel.stageFailed {
+                        HStack {
+                            Text(appModel.stageWasStopped ? "중지했어요" : "단계 실행에 실패했어요")
+                            Spacer()
+                            Button("목록으로 돌아가기") { appModel.returnFromStage() }
+                        }
+                    }
+
                     if let decision = appModel.stageDecision {
                         HStack(spacing: 10) {
                             Image(systemName: "exclamationmark.circle")

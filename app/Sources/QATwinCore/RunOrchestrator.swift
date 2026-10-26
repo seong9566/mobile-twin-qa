@@ -37,6 +37,10 @@ public enum RunEvent: Equatable, Sendable {
     case state(id: String, ScenarioRunState)
     case usage(Usage)
     case stall(id: String, StallSignal)
+    case pollFailing(id: String, reason: String)
+    case pollRecovered(id: String)
+    case traceLogMissing(id: String)
+    case adbUnavailable(id: String)
     case wifiDown(id: String)
     case humanAction(id: String, note: String)
     case spendLimitReached
@@ -44,6 +48,7 @@ public enum RunEvent: Equatable, Sendable {
 }
 
 public actor RunOrchestrator {
+    private let adbPath: String?
     private let api: ArtemisAPI
     private let artemisHome: URL
     private let clock: any Clock<Duration>
@@ -53,7 +58,7 @@ public actor RunOrchestrator {
     private let fileManager = FileManager.default
     private let plan: PlanDocument
     private let pollInterval: Duration
-    private let runDir: URL
+    public nonisolated let runDir: URL
     private let scenarios: [Scenario]
     private let shell: ShellRunner
     private let tracesDir: URL?
@@ -63,6 +68,8 @@ public actor RunOrchestrator {
     private var currentSessionID: String?
     private var isRunning = false
     private var sessionResults: [String: SessionState] = [:]
+    private var stallRearmedAt: [String: Date] = [:]
+    private var stallWarningsSent: Set<String> = []
     private var stateFile: RunStateFile
     private var stopAllRequested = false
     private var stopCurrentRequested = false
@@ -75,13 +82,16 @@ public actor RunOrchestrator {
         scenarios: [Scenario],
         deviceSerial: String,
         server: String,
+        planRelativePath: String,
         artemisHome: URL,
         tracesDir: URL?,
+        adbPath: String?,
         pollInterval: Duration = .seconds(5),
         clock: any Clock<Duration> = ContinuousClock()
     ) {
         let events = AsyncStream<RunEvent>.makeStream()
         let order = scenarios.map(\.id)
+        self.adbPath = adbPath
         self.api = api
         self.artemisHome = artemisHome
         self.clock = clock
@@ -94,7 +104,7 @@ public actor RunOrchestrator {
         self.scenarios = scenarios
         self.shell = shell
         self.stateFile = RunStateFile(
-            plan: plan.url.lastPathComponent,
+            plan: planRelativePath,
             deviceSerial: deviceSerial,
             server: server,
             order: order,
@@ -159,6 +169,7 @@ public actor RunOrchestrator {
               let scenario = scenarios.first(where: { $0.id == id }),
               prepareRetryArtifacts(id: id)
         else {
+            continuation.yield(.finished)
             return
         }
 
@@ -183,7 +194,10 @@ public actor RunOrchestrator {
     }
 
     private func run(_ scenario: Scenario) async -> RunResult {
+        stopCurrentRequested = false
         currentID = scenario.id
+        stallRearmedAt[scenario.id] = nil
+        stallWarningsSent.remove(scenario.id)
         if scenario.grade == .B {
             continuation.yield(
                 .humanAction(id: scenario.id, note: scenario.gradeNote ?? "사람이 할 동작")
@@ -213,9 +227,13 @@ public actor RunOrchestrator {
 
         currentSessionID = sessionID
         setState(.running(sessionID: sessionID), for: scenario.id)
-        var didEmitStall = false
+        if adbPath == nil {
+            continuation.yield(.adbUnavailable(id: scenario.id))
+        }
+        var didEmitTraceLogMissing = false
         var didEmitWifiDown = false
         var pollFailures = 0
+        var traceLogMissingCount = 0
         var currentUsage = emptyUsage()
 
         while true {
@@ -229,17 +247,17 @@ public actor RunOrchestrator {
                 currentUsage = try await api.usage(sessionID)
                 updateUsage(current: currentUsage)
             } catch {
-                // 한 번의 조회 실패는 넘기고, 연속으로 실패하면 세션을 멈추고 보류한다.
                 pollFailures += 1
-                guard pollFailures >= Self.maxPollFailures else {
-                    try? await clock.sleep(for: pollInterval)
-                    continue
+                if pollFailures == Self.maxPollFailures {
+                    continuation.yield(
+                        .pollFailing(id: scenario.id, reason: runErrorReason(error))
+                    )
                 }
-                try? await api.stop(sessionID)
-                setState(.held(reason: runErrorReason(error)), for: scenario.id)
-                currentID = nil
-                currentSessionID = nil
-                return .continued
+                try? await clock.sleep(for: pollInterval)
+                continue
+            }
+            if pollFailures >= Self.maxPollFailures {
+                continuation.yield(.pollRecovered(id: scenario.id))
             }
             pollFailures = 0
 
@@ -248,6 +266,15 @@ public actor RunOrchestrator {
             }
 
             let log = traceLog(sessionID: sessionID)
+            if sessionState == .running, log.text == nil {
+                traceLogMissingCount += 1
+                if traceLogMissingCount == 6, !didEmitTraceLogMissing {
+                    continuation.yield(.traceLogMissing(id: scenario.id))
+                    didEmitTraceLogMissing = true
+                }
+            } else {
+                traceLogMissingCount = 0
+            }
             if containsSpendLimit(log.text) {
                 try? await api.stop(sessionID)
                 setState(.held(reason: "API 지출 한도"), for: scenario.id)
@@ -258,22 +285,27 @@ public actor RunOrchestrator {
                 return .spendLimit
             }
 
-            if !didEmitStall, let signal = StallDetector.evaluate(
+            let stallBaseline = [log.modifiedAt, stallRearmedAt[scenario.id]]
+                .compactMap { $0 }
+                .max()
+            if !stallWarningsSent.contains(scenario.id), let signal = StallDetector.evaluate(
                 log: log.text,
-                modifiedAt: log.modifiedAt,
+                modifiedAt: stallBaseline,
                 now: Date()
             ) {
                 continuation.yield(.stall(id: scenario.id, signal))
-                didEmitStall = true
+                stallWarningsSent.insert(scenario.id)
             }
 
-            if await isWifiDown() {
-                if !didEmitWifiDown {
-                    continuation.yield(.wifiDown(id: scenario.id))
-                    didEmitWifiDown = true
+            if adbPath != nil {
+                if await isWifiDown() {
+                    if !didEmitWifiDown {
+                        continuation.yield(.wifiDown(id: scenario.id))
+                        didEmitWifiDown = true
+                    }
+                } else {
+                    didEmitWifiDown = false
                 }
-            } else {
-                didEmitWifiDown = false
             }
 
             switch sessionState {
@@ -307,6 +339,14 @@ public actor RunOrchestrator {
         stateFile.states[id] = state
         writeStateFile()
         continuation.yield(.state(id: id, state))
+    }
+
+    public func rearmStall(id: String) {
+        guard currentID == id else {
+            return
+        }
+        stallRearmedAt[id] = Date()
+        stallWarningsSent.remove(id)
     }
 
     private func handleStopRequest(sessionID: String, id: String) async -> Bool {
@@ -370,9 +410,12 @@ public actor RunOrchestrator {
     }
 
     private func isWifiDown() async -> Bool {
+        guard let adbPath else {
+            return false
+        }
         guard let result = try? await shell.run(
-            "/usr/bin/env",
-            ["adb", "-s", deviceSerial, "shell", "cmd", "wifi", "status"]
+            adbPath,
+            ["-s", deviceSerial, "shell", "cmd", "wifi", "status"]
         ) else {
             return false
         }

@@ -111,6 +111,33 @@ private func runResults(_ scenarios: [ScenarioResult]) -> RunResults {
     #expect(markdown.contains("- 원인 구분: 환경"))
 }
 
+@Test func fillsEmptyMetadataAndIndentsMultilineMemo() throws {
+    let plan = try PlanDocument.load(fixturePlan("2026-01-02-demo_app_test_plan.md"))
+    var results = runResults([
+        result(id: "HOME-01", outcome: .fail, cause: .appDefect),
+    ])
+    results.branch = ""
+    results.commit = nil
+    results.appVersion = " "
+    results.device = ""
+    results.server = nil
+    let review = Review(entries: [
+        "HOME-01": ReviewEntry(memo: "첫 줄\n둘째 줄", causeOverride: nil, include: true),
+    ])
+
+    let markdown = FixRequestRenderer.render(
+        results: results,
+        plan: plan,
+        review: review,
+        project: "demo_app",
+        runDirRelative: "personal/demo_app/runs/x/2026-01-03-0900"
+    )
+
+    #expect(markdown.contains("- 소스: \(plan.header.branch) · \(plan.header.commit) · 앱 버전 \(plan.header.appVersion)"))
+    #expect(markdown.contains("- 기기: 미확인 · 서버: 미확인"))
+    #expect(markdown.contains("- 수정할 점: 첫 줄\n  둘째 줄"))
+}
+
 @Test func reviewRoundTrip() throws {
     let directory = try reviewTempDir()
     defer { try? FileManager.default.removeItem(at: directory) }

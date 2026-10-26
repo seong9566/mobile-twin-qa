@@ -110,12 +110,43 @@ struct RunProgressView: View {
                             color: .qaFail,
                             background: .qaFailWeak
                         ) {
-                            Button("계속 기다리기") { appModel.keepWaiting(id: scenario.id) }
+                            Button("계속 기다리기") {
+                                Task { await appModel.keepWaiting(id: scenario.id) }
+                            }
                             Button("중지하고 보류") {
                                 Task { await appModel.stopCurrentAsHeld() }
                             }
                             .foregroundStyle(Color.qaFail)
                         }
+                    }
+                    if let reason = appModel.pollFailureReasons[scenario.id] {
+                        warning(
+                            icon: "exclamationmark.triangle",
+                            text: "Artemis 상태를 읽지 못하고 있어요 — \(reason)",
+                            color: .qaFail,
+                            background: .qaFailWeak
+                        ) {
+                            Button("중지하고 보류") {
+                                Task { await appModel.stopCurrentAsHeld() }
+                            }
+                            .foregroundStyle(Color.qaFail)
+                        }
+                    }
+                    if appModel.traceLogMissingScenarioIDs.contains(scenario.id) {
+                        warning(
+                            icon: "doc.badge.ellipsis",
+                            text: "Artemis 로그를 찾지 못해 멈춤·지출 한도 감시를 못 하고 있어요 — 설정의 ARTEMIS_HOME을 확인하세요",
+                            color: .qaWarn,
+                            background: .qaWarnWeak
+                        ) { EmptyView() }
+                    }
+                    if appModel.adbUnavailableScenarioIDs.contains(scenario.id) {
+                        warning(
+                            icon: "wifi.exclamationmark",
+                            text: "adb를 찾지 못해 Wi-Fi 확인을 못 해요",
+                            color: .qaWarn,
+                            background: .qaWarnWeak
+                        ) { EmptyView() }
                     }
                     if appModel.wifiDownScenarioIDs.contains(scenario.id) {
                         warning(

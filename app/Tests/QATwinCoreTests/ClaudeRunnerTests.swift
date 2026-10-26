@@ -49,6 +49,7 @@ private func claudeRunnerTempDir() throws -> URL {
         deviceSerial: "D1",
         server: "dev",
         scenarioIDs: ["HOME-01", "HOME-02"],
+        buildInstall: true,
         screenshotApproved: true
     )
     #expect(
@@ -61,7 +62,8 @@ private func claudeRunnerTempDir() throws -> URL {
         - 기기: D1
         - 서버: dev
         - 시나리오: HOME-01, HOME-02
-        - 스크린샷 전송 승인: 예
+        - 빌드·설치: 예
+        - 스크린샷 전송 승인: 해당 없음(개인)
         """
     )
     #expect(

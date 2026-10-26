@@ -8,6 +8,7 @@ struct ApprovalSheet: View {
     @State private var devices: [ArtemisDevice] = []
     @State private var deviceSerial = ""
     @State private var server = ""
+    @State private var buildInstall = true
     @State private var screenshotApproved = false
     @State private var presentKeys: Set<String> = []
     @State private var deviceError: String?
@@ -45,6 +46,11 @@ struct ApprovalSheet: View {
                         }
                         .toggleStyle(.checkbox)
                     }
+
+                    ForEach(dependencyWarnings, id: \.self) { warning in
+                        Label(warning, systemImage: "exclamationmark.triangle")
+                            .foregroundStyle(Color.qaWarn)
+                    }
                 }
                 .padding(.horizontal, 24)
                 .padding(.vertical, 14)
@@ -63,6 +69,7 @@ struct ApprovalSheet: View {
                 Button("취소") { dismiss() }
                 Button("시작") {
                     let approval = Approval(
+                        buildInstall: buildInstall,
                         deviceSerial: deviceSerial,
                         server: server,
                         scenarioIDs: selectedScenarios.map(\.id),
@@ -106,6 +113,12 @@ struct ApprovalSheet: View {
                 }
                 .labelsHidden()
                 .disabled(servers.isEmpty)
+            }
+            Divider()
+            optionRow("빌드·설치") {
+                Toggle("", isOn: $buildInstall)
+                    .labelsHidden()
+                    .toggleStyle(.switch)
             }
             Divider()
             optionRow("시나리오", alignment: .top) {
@@ -158,6 +171,23 @@ struct ApprovalSheet: View {
     private var servers: [String] {
         guard let project = appModel.selectedProject else { return [] }
         return appModel.environmentNames(for: project)
+    }
+
+    private var dependencyWarnings: [String] {
+        let positions = Dictionary(
+            uniqueKeysWithValues: selectedScenarios.enumerated().map { ($0.element.id, $0.offset) }
+        )
+        return selectedScenarios.flatMap { scenario in
+            scenario.dependsOn.compactMap { dependency in
+                guard let dependencyIndex = positions[dependency] else {
+                    return "\(scenario.id)의 사전 조건 \(dependency)가 이번 실행에 없어 보류될 거예요"
+                }
+                guard let scenarioIndex = positions[scenario.id], dependencyIndex > scenarioIndex else {
+                    return nil
+                }
+                return "\(scenario.id)의 사전 조건 \(dependency)가 뒤에 있어 보류될 거예요"
+            }
+        }
     }
 
     private var currentPresentKeys: Set<String> {

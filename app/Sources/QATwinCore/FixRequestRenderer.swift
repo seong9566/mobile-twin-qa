@@ -9,11 +9,14 @@ public enum FixRequestRenderer {
         runDirRelative: String
     ) -> String {
         let runName = URL(fileURLWithPath: runDirRelative).lastPathComponent
+        let branch = nonEmpty(results.branch) ?? plan?.header.branch ?? ""
+        let commit = nonEmpty(results.commit) ?? plan?.header.commit ?? ""
+        let appVersion = nonEmpty(results.appVersion) ?? plan?.header.appVersion ?? ""
         var lines = [
             "# \(project) 수정 요청 — \(runName)",
             "",
-            "- 소스: \(results.branch ?? "") · \(results.commit ?? "") · 앱 버전 \(results.appVersion ?? "")",
-            "- 기기: \(results.device ?? "") · 서버: \(results.server ?? "")",
+            "- 소스: \(branch) · \(commit) · 앱 버전 \(appVersion)",
+            "- 기기: \(nonEmpty(results.device) ?? "미확인") · 서버: \(nonEmpty(results.server) ?? "미확인")",
             "- 실행 기록: `\(runDirRelative)/`",
         ]
         var includesToolMisjudgment = false
@@ -71,7 +74,9 @@ public enum FixRequestRenderer {
         guard let value = nonEmpty(value) else {
             return
         }
-        lines.append("- \(label): \(value)")
+        let values = value.components(separatedBy: .newlines)
+        lines.append("- \(label): \(values[0])")
+        lines.append(contentsOf: values.dropFirst().map { "  \($0)" })
     }
 
     private static func nonEmpty(_ value: String?) -> String? {

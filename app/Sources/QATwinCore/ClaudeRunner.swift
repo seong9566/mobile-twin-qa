@@ -28,6 +28,7 @@ public enum StagePrompt {
         deviceSerial: String,
         server: String,
         scenarioIDs: [String],
+        buildInstall: Bool,
         screenshotApproved: Bool
     ) -> String {
         """
@@ -39,7 +40,8 @@ public enum StagePrompt {
         - 기기: \(deviceSerial)
         - 서버: \(server)
         - 시나리오: \(scenarioIDs.joined(separator: ", "))
-        - 스크린샷 전송 승인: \(screenshotApproved ? "예" : "아니오")
+        - 빌드·설치: \(buildInstall ? "예" : "아니오")
+        - 스크린샷 전송 승인: \(project.category == .personal ? "해당 없음(개인)" : (screenshotApproved ? "예" : "아니오"))
         """
     }
 
