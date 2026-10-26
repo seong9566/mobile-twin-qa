@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>목록 확인·수정</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#0a4aa3}a:hover{color:#0956bb}
+</style>
+</helmet>
+<div class="win" style="width:1280px;height:800px">
+  <header class="tb">
+    <div class="lights" aria-hidden="true"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+    <div class="tb-title"><b>2026-10-26-acme_patrol_test_plan.md</b><span>dev · abc1234 · 앱 버전 1.2.0+3</span></div>
+    <nav class="path" aria-label="진행 단계">
+      <span class="done"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10"></path></svg>등록</span>
+      <span class="done"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10"></path></svg>계획</span>
+      <span class="now" aria-current="step">목록 확인</span>
+      <span>실행</span>
+      <span>결과</span>
+    </nav>
+    <sc-if value="{{dirty}}" hint-placeholder-val="{{false}}"><button class="btn" type="button" onClick="{{save}}">저장</button></sc-if>
+    <sc-if value="{{clean}}" hint-placeholder-val="{{true}}"><button class="btn" type="button" disabled="{{true}}">저장</button></sc-if>
+    <a class="btn btn-primary" href="Approval.dc.html">실행 준비…</a>
+  </header>
+  <div class="body">
+    <nav class="side" aria-label="프로젝트">
+      <h2>회사</h2>
+      <a class="si" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg><b style="font-weight:600">acme_patrol</b></a>
+      <div class="si-group">계획</div>
+      <a class="si sub on" href="Main.dc.html" aria-current="page"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path></svg>2026-10-26<span class="meta">실행 전</span></a>
+      <a class="si sub" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path></svg>2026-10-21</a>
+      <div class="si-group">실행</div>
+      <a class="si sub" href="Results.dc.html" style="flex-direction:column;align-items:stretch;height:auto;padding-top:6px;padding-bottom:7px;gap:5px">
+        <span style="display:flex;align-items:center;gap:7px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg>10-24 09:47<span class="meta">29 / 33</span></span>
+        <span class="tape-mini" aria-hidden="true"><i class="s-ok" style="flex:29"></i><i class="s-fail" style="flex:3"></i><i class="s-idle" style="flex:1"></i></span>
+      </a>
+      <a class="si sub" href="Results.dc.html" style="flex-direction:column;align-items:stretch;height:auto;padding-top:6px;padding-bottom:7px;gap:5px">
+        <span style="display:flex;align-items:center;gap:7px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg>10-22 08:51<span class="meta">3 / 3</span></span>
+        <span class="tape-mini" aria-hidden="true"><i class="s-ok" style="flex:3"></i></span>
+      </a>
+      <h2>개인</h2>
+      <a class="si" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>departure-assistant</a>
+      <div class="side-foot">
+        <div class="meter" aria-label="Claude Code 사용률">
+          <div class="meter-row">5시간 <b>34%</b><span class="meter-bar"><i style="width:34%"></i></span></div>
+          <div class="meter-row">주간 <b>29%</b><span class="meter-bar"><i style="width:29%"></i></span></div>
+          <span style="color:#5d636c">Claude Code · 14:02 기준</span>
+        </div>
+        <a class="btn" href="Stage.dc.html" style="justify-content:center"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>앱 소스 폴더 열기…</a>
+      </div>
+    </nav>
+    <main style="flex-grow:1;min-width:0;display:flex">
+      <section style="flex-grow:1;min-width:0;display:flex;flex-direction:column;gap:12px;padding:18px 18px 14px;overflow:auto" aria-labelledby="list-h">
+        <div style="display:flex;align-items:baseline;gap:10px">
+          <h1 id="list-h" style="margin:0;font-size:17px;font-weight:650">이번에 돌릴 시나리오</h1>
+          <span style="font-size:12px;color:#545a63">체크를 끄면 빠져요 · 줄을 끌어 순서를 바꿔요</span>
+        </div>
+        <div class="tbl" role="table" aria-label="시나리오">
+          <div class="tbl-h" role="row" style="grid-template-columns:14px 18px 70px minmax(0,1fr) 112px 120px 18px">
+            <span></span><span></span><span role="columnheader">ID</span><span role="columnheader">제목</span><span role="columnheader">등급</span><span role="columnheader">계정</span><span></span>
+          </div>
+          <sc-for list="{{rows}}" as="r" hint-placeholder-count="6">
+            <div class="tbl-r" role="row" onClick="{{r.pick}}" style="{{r.rowStyle}}">
+              <svg viewBox="0 0 14 14" width="14" height="14" aria-hidden="true" style="fill:#a3a9b1;cursor:grab"><circle cx="4.5" cy="3" r="1.2"></circle><circle cx="9.5" cy="3" r="1.2"></circle><circle cx="4.5" cy="7" r="1.2"></circle><circle cx="9.5" cy="7" r="1.2"></circle><circle cx="4.5" cy="11" r="1.2"></circle><circle cx="9.5" cy="11" r="1.2"></circle></svg>
+              <input type="checkbox" checked="{{r.checked}}" onChange="{{r.toggle}}" onClick="{{r.stop}}" aria-label="{{r.checkLabel}}">
+              <span class="mono" style="{{r.idStyle}}">{{r.id}}</span>
+              <span style="display:flex;flex-direction:column;min-width:0;padding:6px 0">
+                <span style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{r.title}}</span>
+                <sc-if value="{{r.dep}}" hint-placeholder-val="{{false}}"><span style="font-size:11px;color:#5d636c">{{r.dep}}</span></sc-if>
+              </span>
+              <span class="{{r.tagClass}}" style="justify-self:start">{{r.gradeLabel}}</span>
+              <span style="font-size:12px;color:#545a63;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">{{r.account}}</span>
+              <sc-if value="{{r.warn}}" hint-placeholder-val="{{false}}">
+                <svg class="ico" viewBox="0 0 24 24" role="img" aria-label="위험 동작 경고" style="color:#a15c00"><path d="M12 3 2 20h20L12 3z"></path><path d="M12 10v4"></path><path d="M12 17h.01"></path></svg>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <details style="font-size:12px;color:#545a63">
+          <summary style="cursor:pointer">수동(C) 2개는 실행하지 않아요 — 목록 보기</summary>
+          <ul style="margin:6px 0 0;padding-left:18px;line-height:1.8">
+            <li>착신 알림 → 전체화면 알람 → '확인' (기기 2대)</li>
+            <li>가로 화면·폴더블 배치</li>
+          </ul>
+        </details>
+      </section>
+      <aside style="width:384px;flex-shrink:0;border-left:1px solid #e3e5e9;background:#fbfbfc;display:flex;flex-direction:column;overflow:auto" aria-labelledby="insp-h">
+        <div style="padding:18px 18px 14px;display:flex;flex-direction:column;gap:6px;border-bottom:1px solid #e3e5e9">
+          <span class="mono" style="color:#545a63">{{sel.id}}</span>
+          <h2 id="insp-h" style="margin:0;font-size:16px;font-weight:650">{{sel.title}}</h2>
+          <dl style="margin:4px 0 0;display:grid;grid-template-columns:64px minmax(0,1fr);gap:4px 10px;font-size:12px">
+            <dt style="color:#5d636c">등급</dt><dd style="margin:0">{{sel.gradeLong}}</dd>
+            <dt style="color:#5d636c">계정</dt><dd style="margin:0">{{sel.account}}</dd>
+            <dt style="color:#5d636c">사전 조건</dt><dd style="margin:0">{{sel.pre}}</dd>
+            <dt style="color:#5d636c">근거</dt><dd class="mono" style="margin:0;font-size:11px">{{sel.evidence}}</dd>
+          </dl>
+        </div>
+        <div style="padding:16px 18px;display:flex;flex-direction:column;gap:14px;flex-grow:1">
+          <label class="field"><span>테스트 순서 (goal)</span>
+            <textarea rows="7" value="{{goal}}" onChange="{{onGoal}}"></textarea>
+          </label>
+          <sc-if value="{{goalWarn}}" hint-placeholder-val="{{false}}">
+            <div class="note note-warn" role="alert">
+              <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20L12 3z"></path><path d="M12 10v4"></path><path d="M12 17h.01"></path></svg>
+              <span>'{{goalWarn}}' 동작이 있는데 "누르지 마"가 없어요. 실제 발신·삭제가 일어날 수 있어요.</span>
+            </div>
+          </sc-if>
+          <label class="field"><span>통과 조건</span>
+            <textarea rows="3" value="{{pass}}" onChange="{{onPass}}"></textarea>
+          </label>
+          <p style="margin:auto 0 0;font-size:12px;color:#5d636c;line-height:1.5">아직 실행하지 않은 계획이라 이 파일에 저장해요. 실행 기록이 있는 계획을 고치면 새 계획 파일로 저장해요.</p>
+        </div>
+      </aside>
+    </main>
+  </div>
+  <footer class="status">
+    <span>{{checkedCount}} / {{total}}개 실행</span><span class="sep"></span>
+    <span>사람 필요 {{humanCount}}</span><span class="sep"></span>
+    <span>위험 경고 {{warnCount}}</span><span class="sep"></span>
+    <span>{{editedNote}}</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+var SCEN = [
+  { id: 'AUTH-01', title: '로그인 입력 검증', grade: 'A', account: '로그아웃 상태', pre: '없음', goal: '로그인 화면에서 아이디만 입력하고 \'로그인\' 버튼이 꺼져 있는지 보고, 틀린 비밀번호로 로그인해 나오는 문구를 적어.', pass: '비밀번호가 비면 버튼 비활성 · "아이디 또는 비밀번호가 올바르지 않습니다."', evidence: 'login_screen.dart:88' },
+  { id: 'HOME-01', title: '근무 시작·종료', grade: 'A', account: '근무자', pre: '없음', goal: '홈에서 \'근무 시작\'을 눌러 상태가 \'근무 중\'으로 바뀌는지 보고, \'근무 종료\' → \'종료\'로 되돌려.', pass: '근무 중 표시 · 종료 후 근무 전', evidence: 'work_card.dart:76' },
+  { id: 'HOME-02', title: '비상연락 확인 시트', grade: 'A', account: '근무자', pre: '없음', goal: '홈의 비상연락 카드에서 담당자 전화 버튼을 눌러 확인 시트 문구를 적어.', pass: '"현장 관리자에게 전화할까요?" 시트 · 통화 기록 없음', evidence: 'emergency_card.dart:40' },
+  { id: 'PAT-01', title: '순찰 시작 준비', grade: 'A', account: '근무자(근무 중)', pre: 'HOME-01의 근무 시작', dep: 'HOME-01 뒤', goal: '순찰 탭에서 \'순찰 시작\'을 눌러 준비 시트 4항목 상태를 적고 \'취소\'.', pass: '4항목 "준비 완료" · 버튼 활성', evidence: 'start_checklist_sheet.dart:52' },
+  { id: 'PAT-02', title: 'NFC 지점 인증', grade: 'B', note: '사람이 태그', account: '근무자', pre: 'PAT-01', dep: 'PAT-01 뒤 · 태그 60초 대기', goal: '\'지점 인증하기\'를 눌러 태그 안내가 뜨면 사람이 태그를 댈 때까지 최대 60초 기다려. \'메모 없이 인증\'을 눌러.', pass: '지점 완료 · 다음 지점 진행 중', evidence: 'nfc_auth_sheet.dart:31' },
+  { id: 'SET-01', title: '테마 바꾸기', grade: 'A', account: '근무자', pre: '없음', goal: '설정에서 테마를 다크 → 라이트 → 자동으로 바꾸며 홈 화면이 바뀌는지 보고 자동으로 돌려놔.', pass: '테마 반영 · 끝난 뒤 자동', evidence: 'settings_screen.dart:61' }
+];
+var DANGER = ['전화', '발신', '삭제', '결제', '송금'];
+function lint(goal) {
+  if (/누르지 마|하지 마/.test(goal)) return '';
+  for (var i = 0; i < DANGER.length; i++) if (goal.indexOf(DANGER[i]) >= 0) return DANGER[i];
+  return '';
+}
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { selected: 'HOME-02', off: { 'SET-01': true }, edits: {}, saved: {} }; }
+  renderVals() {
+    var self = this, st = this.state;
+    var val = function (s, k) {
+      if (st.edits[s.id] && st.edits[s.id][k] != null) return st.edits[s.id][k];
+      if (st.saved[s.id] && st.saved[s.id][k] != null) return st.saved[s.id][k];
+      return s[k];
+    };
+    var rows = SCEN.map(function (s) {
+      var isSel = s.id === st.selected, checked = !st.off[s.id];
+      return {
+        id: s.id, title: s.title, account: s.account, dep: s.dep || '', checked: checked,
+        checkLabel: s.id + ' 실행에 포함',
+        gradeLabel: s.grade === 'B' ? 'B · ' + s.note : 'A · 자동',
+        tagClass: s.grade === 'B' ? 'tag tag-b' : 'tag tag-a',
+        warn: !!lint(val(s, 'goal')),
+        idStyle: checked ? '' : 'color:#8a9099',
+        rowStyle: 'grid-template-columns:14px 18px 70px minmax(0,1fr) 112px 120px 18px;' + (isSel ? 'background:#dce8fa;' : '') + (checked ? '' : 'color:#8a9099;'),
+        pick: function () { self.setState({ selected: s.id }); },
+        stop: function (e) { e.stopPropagation(); },
+        toggle: function () { var off = Object.assign({}, st.off); off[s.id] = !off[s.id]; self.setState({ off: off }); }
+      };
+    });
+    var sel = SCEN.filter(function (s) { return s.id === st.selected; })[0];
+    var setEdit = function (key) { return function (e) { var ed = Object.assign({}, st.edits); ed[sel.id] = Object.assign({}, ed[sel.id]); ed[sel.id][key] = e.target.value; self.setState({ edits: ed }); }; };
+    var edited = Object.keys(st.edits).length;
+    return {
+      rows: rows, total: SCEN.length,
+      checkedCount: SCEN.filter(function (s) { return !st.off[s.id]; }).length,
+      humanCount: SCEN.filter(function (s) { return s.grade === 'B' && !st.off[s.id]; }).length,
+      warnCount: SCEN.filter(function (s) { return !st.off[s.id] && lint(val(s, 'goal')); }).length,
+      editedNote: edited ? '저장 안 한 수정 ' + edited + '개' : (st.savedOnce ? '저장했어요' : '수정 없음'),
+      dirty: edited > 0, clean: edited === 0,
+      save: function () {
+        var sv = Object.assign({}, st.saved);
+        Object.keys(st.edits).forEach(function (id) { sv[id] = Object.assign({}, sv[id], st.edits[id]); });
+        self.setState({ edits: {}, saved: sv, savedOnce: true });
+      },
+      sel: { id: sel.id, title: sel.title, account: sel.account, pre: sel.pre, evidence: sel.evidence, gradeLong: sel.grade === 'B' ? 'B 반자동 — ' + sel.note : 'A 자동' },
+      goal: val(sel, 'goal'), pass: val(sel, 'pass'), goalWarn: lint(val(sel, 'goal')),
+      onGoal: setEdit('goal'), onPass: setEdit('pass')
+    };
+  }
+}
+</script>
+</body>
+</html>

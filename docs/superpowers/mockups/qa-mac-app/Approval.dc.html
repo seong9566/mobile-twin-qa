@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>실행 승인</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#0a4aa3}a:hover{color:#0956bb}
+</style>
+</helmet>
+<div class="win" style="width:1280px;height:800px;position:relative">
+  <header class="tb">
+    <div class="lights" aria-hidden="true"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+    <div class="tb-title"><b>2026-10-26-acme_patrol_test_plan.md</b><span>dev · abc1234 · 앱 버전 1.2.0+3</span></div>
+  </header>
+  <div class="scrim" aria-hidden="true"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="ap-h" style="width:640px;max-height:740px">
+    <div style="padding:20px 24px 4px;display:flex;flex-direction:column;gap:4px">
+      <h1 id="ap-h" style="margin:0;font-size:16px;font-weight:650">이대로 실행할까요?</h1>
+      <p style="margin:0;font-size:12px;color:#545a63">시작하면 앱이 아래 기기에서 시나리오 5개를 차례로 돌려요.</p>
+    </div>
+    <div style="padding:14px 24px;display:flex;flex-direction:column;gap:14px;overflow:auto">
+      <div class="group">
+        <label class="group-r"><span class="lbl">기기</span>
+          <select style="flex-grow:1"><option>Galaxy S23 · Android 14 · R5CT00DEMO1</option><option>Pixel 8 · Android 15 · 3A1B00DEMO2</option></select>
+        </label>
+        <label class="group-r"><span class="lbl">서버</span>
+          <select style="flex-grow:1"><option>dev — dev-api.example.com</option><option>staging</option></select>
+        </label>
+        <div class="group-r" style="align-items:flex-start;padding-top:10px;padding-bottom:10px"><span class="lbl">시나리오</span>
+          <div style="display:flex;flex-direction:column;gap:6px;flex-grow:1;min-width:0">
+            <span>AUTH-01 → HOME-01 → HOME-02 → PAT-01 → PAT-02</span>
+            <span style="font-size:12px;color:#5d636c">지난 실행 기준 Artemis 호출 약 210회 예상</span>
+          </div>
+        </div>
+        <div class="group-r" style="align-items:flex-start;padding-top:10px;padding-bottom:10px"><span class="lbl">사람이 할 일</span>
+          <div style="display:flex;gap:8px;align-items:flex-start;color:#8f4a00">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="margin-top:1px"><path d="M18 8a6 6 0 1 0-12 0c0 7-3 9-3 9h18s-3-2-3-9"></path><path d="M13.7 21a2 2 0 0 1-3.4 0"></path></svg>
+            <span><b>PAT-02</b> 태그 안내가 뜨면 60초 안에 NFC 태그를 대 주세요. 그때 알림이 와요.</span>
+          </div>
+        </div>
+      </div>
+      <section class="field" aria-labelledby="acc-h">
+        <span id="acc-h">계정 <span class="mono" style="font-weight:400;color:#5d636c;font-size:11px">company/acme_patrol/.env</span></span>
+        <div class="group">
+          <sc-for list="{{keys}}" as="k" hint-placeholder-count="4">
+            <div class="group-r">
+              <sc-if value="{{k.present}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" role="img" aria-label="있음" style="color:#1c7a3d;stroke-width:2.2"><path d="m5 12 4 4 10-10"></path></svg></sc-if>
+              <sc-if value="{{k.missing}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" role="img" aria-label="없음" style="color:#a15c00"><path d="M12 3 2 20h20L12 3z"></path><path d="M12 10v4"></path><path d="M12 17h.01"></path></svg></sc-if>
+              <span class="mono" style="width:180px;flex-shrink:0">{{k.name}}</span>
+              <sc-if value="{{k.showSaved}}" hint-placeholder-val="{{true}}">
+                <span style="font-size:12px;color:#5d636c;flex-grow:1">저장됨</span>
+                <button class="btn btn-quiet" type="button" onClick="{{k.change}}">바꾸기</button>
+              </sc-if>
+              <sc-if value="{{k.editing}}" hint-placeholder-val="{{false}}">
+                <input type="password" aria-label="{{k.inputLabel}}" placeholder="{{k.placeholder}}" value="{{k.draft}}" onChange="{{k.type}}" style="flex-grow:1;min-width:0">
+                <button class="btn" type="button" onClick="{{k.save}}">저장</button>
+              </sc-if>
+            </div>
+          </sc-for>
+        </div>
+        <span style="font-size:11px;color:#5d636c;font-weight:400">값은 이 맥의 .env에만 저장해요. Claude Code·로그·결과 파일에는 키 이름만 들어가요.</span>
+      </section>
+      <label style="display:flex;gap:10px;align-items:flex-start;line-height:1.5">
+        <input type="checkbox" checked="{{consent}}" onChange="{{toggleConsent}}" style="margin-top:2px">
+        <span>실행 중 화면 스크린샷이 LLM 제공자로 전송되는 것에 동의해요. <span style="color:#5d636c">회사 프로젝트라 필요해요.</span></span>
+      </label>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 24px 16px;border-top:1px solid #e3e5e9">
+      <div class="meter" style="flex-grow:1;max-width:240px" aria-label="Claude Code 사용률">
+        <div class="meter-row">Claude 5시간 <b>34%</b><span class="meter-bar"><i style="width:34%"></i></span></div>
+      </div>
+      <span role="status" style="font-size:12px;color:#8f4a00;margin-left:auto">{{blocker}}</span>
+      <a class="btn" href="Main.dc.html">취소</a>
+      <sc-if value="{{ready}}" hint-placeholder-val="{{false}}"><a class="btn btn-primary" href="Progress.dc.html">시작</a></sc-if>
+      <sc-if value="{{notReady}}" hint-placeholder-val="{{true}}"><button class="btn" type="button" disabled="{{true}}">시작</button></sc-if>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+var KEYS = ['TEST_USER_ID', 'TEST_USER_PASSWORD', 'TEST_ADMIN_ID', 'TEST_ADMIN_PASSWORD'];
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { present: { TEST_USER_ID: true, TEST_USER_PASSWORD: true, TEST_ADMIN_ID: true }, editing: {}, drafts: {}, consent: false }; }
+  renderVals() {
+    var self = this, st = this.state;
+    var keys = KEYS.map(function (n) {
+      var present = !!st.present[n], editing = !present || !!st.editing[n];
+      return {
+        name: n, present: present, missing: !present, showSaved: present && !st.editing[n], editing: editing,
+        inputLabel: n + ' 값', placeholder: present ? '새 값' : '값을 넣어 주세요', draft: st.drafts[n] || '',
+        type: function (e) { var d = Object.assign({}, st.drafts); d[n] = e.target.value; self.setState({ drafts: d }); },
+        change: function () { var ed = Object.assign({}, st.editing); ed[n] = true; self.setState({ editing: ed }); },
+        save: function () {
+          if (!st.drafts[n]) return;
+          var p = Object.assign({}, st.present); p[n] = true;
+          var ed = Object.assign({}, st.editing); delete ed[n];
+          var d = Object.assign({}, st.drafts); delete d[n];
+          self.setState({ present: p, editing: ed, drafts: d });
+        }
+      };
+    });
+    var missing = KEYS.filter(function (n) { return !st.present[n]; });
+    var blocker = missing.length ? missing.join(', ') + ' 값이 없어요' : (!st.consent ? '스크린샷 전송 동의가 필요해요' : '');
+    return {
+      keys: keys, consent: st.consent,
+      toggleConsent: function () { self.setState({ consent: !st.consent }); },
+      blocker: blocker, ready: !blocker, notReady: !!blocker
+    };
+  }
+}
+</script>
+</body>
+</html>

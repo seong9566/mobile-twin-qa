@@ -79,6 +79,13 @@
 - 입력은 가려지는 칸(SecureField). 저장된 값은 다시 보여 주지 않고 "바꾸기"만 있다.
 - 앱이 `company|personal/<project>/.env`에 직접 쓴다(git 제외 파일). 형식은 `android-login.sh`가 읽는 대로 한 줄에 `KEY=value`이고, 다른 줄과 주석은 그대로 둔 채 해당 키 줄만 바꾸거나 더한다. 값은 LLM을 거치지 않는다 — Claude Code는 지금처럼 `tools/android-login.sh`로 `.env`를 읽어 로그인한다.
 
+### 4.7 화면 구성 (목업 확정, 2026-10-26)
+- 목업: https://claude.ai/artifact/Fy51H7ZaUCya3uQBhKpjYp , 원본은 `docs/superpowers/mockups/qa-mac-app/`(지어낸 데이터).
+- macOS 기본 모양(디자인 시스템 없음). 모든 화면이 같은 사이드바·툴바·상태 막대를 쓴다. 툴바에 단계 표시(등록 › 계획 › 목록 확인 › 실행 › 결과).
+- 실행 테이프: 시나리오 하나 = 한 칸, 폭 = LLM 호출 수, 색 = 상태. 진행·결과 화면과 사이드바 실행 기록에 쓴다.
+- 결과 화면은 목록·상세 분할(왼쪽 확인 필요·통과, 오른쪽 녹화·기대/실제·확인 항목·원인·메모). 수정 요청 md는 항목 체크와 미리보기가 있는 시트.
+- 숫자 카드 줄·유니코드 기호 아이콘·선택 행 색 막대는 쓰지 않는다.
+
 ## 5. 내가 정한 것 (Claude의 판단 — 사용자가 뒤집을 수 있음)
 
 - **SwiftUI macOS 앱**, 영상은 AVKit. 이 맥: Xcode 27.0, Swift 6.4, macOS 27.0.1.
