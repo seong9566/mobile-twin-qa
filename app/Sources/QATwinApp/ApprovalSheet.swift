@@ -6,11 +6,14 @@ struct ApprovalSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var devices: [ArtemisDevice] = []
+    @State private var busyDeviceCount = 0
+    @State private var unavailableDeviceCount = 0
     @State private var deviceSerial = ""
     @State private var server = ""
     @State private var buildInstall = true
     @State private var screenshotApproved = false
     @State private var presentKeys: Set<String> = []
+    @State private var accountRoles: [String: AccountRole] = [:]
     @State private var deviceError: String?
 
     var body: some View {
@@ -33,10 +36,16 @@ struct ApprovalSheet: View {
 
                     if let project = appModel.selectedProject, let plan = appModel.selectedPlan {
                         AccountsSection(
-                            keys: plan.accountEnvKeys,
+                            keys: requiredKeys,
                             envURL: project.dir.appending(path: ".env"),
                             onPresentKeysChange: { presentKeys = $0 }
                         )
+                        if !plan.accountEnvKeys.isEmpty,
+                           plan.usesAllAccountKeys(for: selectedScenarios, roles: accountRoles) {
+                            Text("계획에 역할 키가 없는 시나리오가 있어 계정 키를 모두 확인해요")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.qaTertiaryText)
+                        }
                     }
 
                     if appModel.selectedProject?.category == .company {
@@ -88,22 +97,35 @@ struct ApprovalSheet: View {
         .onAppear {
             server = servers.first ?? ""
             presentKeys = currentPresentKeys
+            accountRoles = currentAccountRoles
         }
     }
 
     private var runOptions: some View {
         VStack(spacing: 0) {
-            optionRow("기기") {
-                if devices.isEmpty {
-                    Text(deviceError ?? "기기 없음 — USB 연결과 잠금 해제를 확인하세요")
-                        .foregroundStyle(Color.qaTertiaryText)
-                } else {
-                    Picker("기기", selection: $deviceSerial) {
-                        ForEach(devices, id: \.serial) { device in
-                            Text(deviceLabel(device)).tag(device.serial)
+            optionRow("기기", alignment: hasExcludedDevices ? .top : .center) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if devices.isEmpty {
+                        Text(deviceError ?? "기기 없음 — USB 연결과 잠금 해제를 확인하세요")
+                            .foregroundStyle(Color.qaTertiaryText)
+                    } else {
+                        Picker("기기", selection: $deviceSerial) {
+                            ForEach(devices, id: \.serial) { device in
+                                Text(deviceLabel(device)).tag(device.serial)
+                            }
                         }
+                        .labelsHidden()
                     }
-                    .labelsHidden()
+                    if busyDeviceCount > 0 {
+                        Text("사용 중인 기기 \(busyDeviceCount)대는 뺐어요")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.qaTertiaryText)
+                    }
+                    if unavailableDeviceCount > 0 {
+                        Text("연결은 됐지만 쓸 수 없는 기기 \(unavailableDeviceCount)대 — USB 디버깅 허용을 확인하세요")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.qaWarn)
+                    }
                 }
             }
             Divider()
@@ -195,8 +217,19 @@ struct ApprovalSheet: View {
         return EnvFile(url: project.dir.appending(path: ".env")).presentKeys()
     }
 
+    private var currentAccountRoles: [String: AccountRole] {
+        guard let project = appModel.selectedProject else { return [:] }
+        let yaml = (try? String(contentsOf: project.dir.appending(path: "project.yaml"), encoding: .utf8)) ?? ""
+        return Workspace.accountRoles(projectYAML: yaml)
+    }
+
+    /// 선택한 시나리오의 역할 키로 고른 계정 키. 역할 키가 없는 시나리오가 있으면 계획의 계정 키 전체.
+    private var requiredKeys: [String] {
+        appModel.selectedPlan?.requiredEnvKeys(for: selectedScenarios, roles: accountRoles) ?? []
+    }
+
     private var blocker: String? {
-        let missing = (appModel.selectedPlan?.accountEnvKeys ?? []).filter { !presentKeys.contains($0) }
+        let missing = requiredKeys.filter { !presentKeys.contains($0) }
         if !missing.isEmpty { return missing.joined(separator: ", ") + " 값이 없어요" }
         if devices.isEmpty || deviceSerial.isEmpty { return "기기를 연결하고 잠금을 해제해 주세요" }
         if server.isEmpty { return "서버를 선택해 주세요" }
@@ -212,13 +245,22 @@ struct ApprovalSheet: View {
             return
         }
         do {
-            devices = try await ArtemisClient(base: base).devices()
+            let choices = ArtemisDevice.choices(from: try await ArtemisClient(base: base).devices())
+            devices = choices.usable
+            busyDeviceCount = choices.busyCount
+            unavailableDeviceCount = choices.unavailableCount
             deviceSerial = devices.first?.serial ?? ""
             deviceError = nil
         } catch {
             devices = []
+            busyDeviceCount = 0
+            unavailableDeviceCount = 0
             deviceError = "기기 없음 — USB 연결과 잠금 해제를 확인하세요"
         }
+    }
+
+    private var hasExcludedDevices: Bool {
+        busyDeviceCount > 0 || unavailableDeviceCount > 0
     }
 
     private func deviceLabel(_ device: ArtemisDevice) -> String {

@@ -303,6 +303,21 @@ public struct RunTotals: Equatable {
     }
 }
 
+extension RunResults {
+    /// 최상위 필드가 빠져도 시나리오는 읽는다.
+    public init(from decoder: Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        schemaVersion = try values.decodeIfPresent(Int.self, forKey: .schemaVersion) ?? 1
+        plan = try values.decodeIfPresent(String.self, forKey: .plan) ?? ""
+        branch = try values.decodeIfPresent(String.self, forKey: .branch)
+        commit = try values.decodeIfPresent(String.self, forKey: .commit)
+        appVersion = try values.decodeIfPresent(String.self, forKey: .appVersion)
+        device = try values.decodeIfPresent(String.self, forKey: .device)
+        server = try values.decodeIfPresent(String.self, forKey: .server)
+        scenarios = try values.decodeIfPresent([ScenarioResult].self, forKey: .scenarios) ?? []
+    }
+}
+
 public enum Artifacts {
     public static func video(runDir: URL, id: String) -> URL? {
         let url = runDir.appending(path: "artifacts").appending(path: id).appending(path: "video.mp4")

@@ -117,7 +117,7 @@ private actor FakeShellRunner: ShellRunner {
         self.output = output
     }
 
-    func run(_ exe: String, _ args: [String]) async throws -> (status: Int32, out: String) {
+    func run(_ exe: String, _ args: [String], timeout: Duration) async throws -> (status: Int32, out: String) {
         calls.append((exe, args))
         return (0, output)
     }
@@ -178,6 +178,18 @@ private func collectUntilFinished(_ stream: AsyncStream<RunEvent>) async -> [Run
         }
     }
     return events
+}
+
+/// 첫 POST /api/run을 기다린다. 3초 안에 오지 않으면 실패한다.
+private func waitForFirstRun(_ api: FakeArtemisAPI) async throws {
+    let deadline = ContinuousClock.now + .seconds(3)
+    while await api.runs().isEmpty {
+        guard ContinuousClock.now < deadline else {
+            Issue.record("3초 안에 Artemis 실행 요청이 오지 않았어요")
+            throw CancellationError()
+        }
+        try await Task.sleep(for: .milliseconds(1))
+    }
 }
 
 private func readRunState(_ runDir: URL) throws -> RunStateFile {
@@ -386,9 +398,7 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
     )
     let run = Task { await orchestrator.start() }
 
-    while await api.runs().isEmpty {
-        try await Task.sleep(for: .milliseconds(1))
-    }
+    try await waitForFirstRun(api)
     await orchestrator.stopAll()
     await run.value
 
@@ -423,8 +433,10 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
         artemisHome: directory
     )
 
-    await orchestrator.retry(id: "HOME-01")
-    await orchestrator.retry(id: "HOME-01")
+    #expect(await orchestrator.retry(id: "HOME-01"))
+    #expect(await orchestrator.lastRetryRefusal == nil)
+    #expect(await !orchestrator.retry(id: "HOME-01"))
+    #expect(await orchestrator.lastRetryRefusal == .alreadyRetried)
 
     #expect(await api.runs() == ["HOME-01"])
     #expect(
@@ -592,8 +604,10 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
     )
     let events = Task { await collectUntilFinished(orchestrator.events) }
 
-    await orchestrator.retry(id: "UNKNOWN-99")
+    let ran = await orchestrator.retry(id: "UNKNOWN-99")
 
+    #expect(!ran)
+    #expect(await orchestrator.lastRetryRefusal == .unknownScenario)
     #expect(await events.value == [.finished])
 }
 
@@ -730,4 +744,90 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
     let received = await events.value
 
     #expect(received.filter { if case .stall = $0 { true } else { false } }.count == 1)
+}
+
+@Test func rearmStallWarnsAgainOnNewIdleLoop() async throws {
+    let plan = try fixtureDocument()
+    let scenarios = [plan.scenarios[0]]
+    let directory = try orchestratorTempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let log = StallDetector.traceLog(sessionID: "S1", artemisHome: directory, tracesDir: nil)
+    try FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let idleLines = String(repeating: "LLM stopped without calling any tool\n", count: 12)
+    try ("Generated summary for Step 3\n" + idleLines).write(to: log, atomically: true, encoding: .utf8)
+    let api = FakeArtemisAPI(
+        goalIDs: goalIDs(scenarios),
+        sessionIDs: ["HOME-01": "S1"],
+        states: ["S1": [.running]]
+    )
+    let orchestrator = makeOrchestrator(
+        api: api,
+        runDir: directory,
+        plan: plan,
+        scenarios: scenarios,
+        artemisHome: directory
+    )
+    let events = Task {
+        var received: [RunEvent] = []
+        var stalls = 0
+        var pollsAfterAppend = 0
+        for await event in orchestrator.events {
+            received.append(event)
+            if case .stall(let id, _) = event {
+                stalls += 1
+                if stalls == 1 {
+                    // 기준점을 먼저 남긴 뒤에 새 반복을 붙인다.
+                    await orchestrator.rearmStall(id: id)
+                    let handle = try FileHandle(forWritingTo: log)
+                    try handle.seekToEnd()
+                    try handle.write(contentsOf: Data(idleLines.utf8))
+                    try handle.close()
+                } else {
+                    await orchestrator.stopAll()
+                }
+            }
+            if stalls == 1, case .usage = event {
+                pollsAfterAppend += 1
+                if pollsAfterAppend > 500 {
+                    await orchestrator.stopAll()
+                }
+            }
+            if event == .finished { break }
+        }
+        return received
+    }
+
+    await orchestrator.start()
+    let received = try await events.value
+
+    #expect(received.filter { if case .stall = $0 { true } else { false } }.count == 2)
+}
+
+@Test func retryWhileRunningIsRefused() async throws {
+    let plan = try fixtureDocument()
+    let scenarios = [plan.scenarios[0]]
+    let directory = try orchestratorTempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let api = FakeArtemisAPI(
+        goalIDs: goalIDs(scenarios),
+        sessionIDs: ["HOME-01": "S1"],
+        states: ["S1": [.running]]
+    )
+    let orchestrator = makeOrchestrator(
+        api: api,
+        runDir: directory,
+        plan: plan,
+        scenarios: scenarios,
+        artemisHome: directory
+    )
+    let run = Task { await orchestrator.start() }
+
+    try await waitForFirstRun(api)
+    let ran = await orchestrator.retry(id: "HOME-01")
+    await orchestrator.stopAll()
+    await run.value
+
+    #expect(!ran)
+    #expect(await orchestrator.lastRetryRefusal == .running)
+    #expect(await api.runs() == ["HOME-01"])
 }

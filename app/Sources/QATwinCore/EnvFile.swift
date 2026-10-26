@@ -13,11 +13,20 @@ public struct EnvFile {
     }
 
     public func presentKeys() -> Set<String> {
+        Set(entries().map(\.key))
+    }
+
+    /// 비어 있지 않은 값만 돌려준다. 화면에 보이기 전에 가릴 때 쓴다.
+    public func values() -> [String] {
+        entries().map(\.value)
+    }
+
+    private func entries() -> [(key: String, value: String)] {
         guard let contents = try? String(contentsOf: url, encoding: .utf8) else {
             return []
         }
 
-        return Set(contents.split(separator: "\n", omittingEmptySubsequences: false).compactMap { line in
+        return contents.split(separator: "\n", omittingEmptySubsequences: false).compactMap { line in
             let line = line.last == "\r" ? line.dropLast() : line[...]
             guard let separator = line.firstIndex(of: "=") else {
                 return nil
@@ -36,8 +45,8 @@ public struct EnvFile {
                 value.removeFirst()
                 value.removeLast()
             }
-            return value.isEmpty ? nil : key
-        })
+            return value.isEmpty ? nil : (key, value)
+        }
     }
 
     public func upsert(key: String, value: String) throws {
@@ -51,7 +60,7 @@ public struct EnvFile {
         let fileManager = FileManager.default
         let existed = fileManager.fileExists(atPath: url.path)
         let contents = existed ? try String(contentsOf: url, encoding: .utf8) : ""
-        let updated = Self.updating(contents, key: key, value: value)
+        let updated = Self.updating(contents, key: key, value: Self.quotedIfNeeded(value))
         let permissions = try existed
             ? Self.permissions(of: url, fileManager: fileManager)
             : 0o600
@@ -76,6 +85,19 @@ public struct EnvFile {
         } else {
             try fileManager.moveItem(at: temporaryURL, to: url)
         }
+    }
+
+    /// 읽는 쪽(entries·tools/android-login.sh)은 같은 따옴표 한 쌍을 벗긴다.
+    /// 값 자체가 같은 따옴표로 감싸여 있으면 큰따옴표 한 쌍을 더 둘러 원래 값이 그대로 읽히게 한다.
+    private static func quotedIfNeeded(_ value: String) -> String {
+        guard value.count >= 2,
+              let first = value.first,
+              first == value.last,
+              first == "\"" || first == "'"
+        else {
+            return value
+        }
+        return "\"\(value)\""
     }
 
     private static func isValidKey(_ key: String) -> Bool {

@@ -47,6 +47,23 @@ public enum RunEvent: Equatable, Sendable {
     case finished
 }
 
+/// retry(id:)가 다시 돌리지 못한 이유.
+public enum RetryRefusal: Equatable, Sendable {
+    case alreadyRetried
+    case unknownScenario
+    case running
+    case moveFailed
+
+    public var reason: String {
+        switch self {
+        case .alreadyRetried: "이미 try1이 있음"
+        case .unknownScenario: "시나리오 없음"
+        case .running: "실행 중"
+        case .moveFailed: "파일 이동 실패"
+        }
+    }
+}
+
 public actor RunOrchestrator {
     private let adbPath: String?
     private let api: ArtemisAPI
@@ -67,10 +84,10 @@ public actor RunOrchestrator {
     private var currentID: String?
     private var currentSessionID: String?
     private var isRunning = false
+    public private(set) var lastRetryRefusal: RetryRefusal?
     private var sessionResults: [String: SessionState] = [:]
+    private var logReaders: [String: LogTailReader] = [:]
     private var stallRearmedAt: [String: Date] = [:]
-    private var stallRearmedLogLength: [String: Int] = [:]
-    private var lastLogLength: [String: Int] = [:]
     private var stallWarningsSent: Set<String> = []
     private var stateFile: RunStateFile
     private var stopAllRequested = false
@@ -166,13 +183,22 @@ public actor RunOrchestrator {
         }
     }
 
-    public func retry(id: String) async {
-        guard !isRunning,
-              let scenario = scenarios.first(where: { $0.id == id }),
-              prepareRetryArtifacts(id: id)
-        else {
+    /// 실제로 다시 돌렸으면 true. 돌리지 못했으면 false를 돌려주고 이유를 lastRetryRefusal에 남긴다.
+    /// 어느 쪽이든 스트림 소비자를 위해 .finished는 보낸다.
+    @discardableResult
+    public func retry(id: String) async -> Bool {
+        let refusal: RetryRefusal?
+        if isRunning {
+            refusal = .running
+        } else if !scenarios.contains(where: { $0.id == id }) {
+            refusal = .unknownScenario
+        } else {
+            refusal = prepareRetryArtifacts(id: id)
+        }
+        lastRetryRefusal = refusal
+        guard refusal == nil, let scenario = scenarios.first(where: { $0.id == id }) else {
             continuation.yield(.finished)
-            return
+            return false
         }
 
         isRunning = true
@@ -186,6 +212,7 @@ public actor RunOrchestrator {
         stopAllRequested = false
         stopCurrentRequested = false
         continuation.yield(.finished)
+        return true
     }
 
     static let maxPollFailures = 3
@@ -199,8 +226,7 @@ public actor RunOrchestrator {
         stopCurrentRequested = false
         currentID = scenario.id
         stallRearmedAt[scenario.id] = nil
-        stallRearmedLogLength[scenario.id] = nil
-        lastLogLength[scenario.id] = nil
+        logReaders[scenario.id] = nil
         stallWarningsSent.remove(scenario.id)
         if scenario.grade == .B {
             continuation.yield(
@@ -230,6 +256,11 @@ public actor RunOrchestrator {
         }
 
         currentSessionID = sessionID
+        logReaders[scenario.id] = LogTailReader(url: StallDetector.traceLog(
+            sessionID: sessionID,
+            artemisHome: artemisHome,
+            tracesDir: tracesDir
+        ))
         setState(.running(sessionID: sessionID), for: scenario.id)
         if adbPath == nil {
             continuation.yield(.adbUnavailable(id: scenario.id))
@@ -269,8 +300,8 @@ public actor RunOrchestrator {
                 return .continued
             }
 
-            let log = traceLog(sessionID: sessionID)
-            if sessionState == .running, log.text == nil {
+            let log = readTraceLog(id: scenario.id)
+            if sessionState == .running, !log.exists {
                 traceLogMissingCount += 1
                 if traceLogMissingCount == 6, !didEmitTraceLogMissing {
                     continuation.yield(.traceLogMissing(id: scenario.id))
@@ -279,11 +310,12 @@ public actor RunOrchestrator {
             } else {
                 traceLogMissingCount = 0
             }
-            if containsSpendLimit(log.text) {
+            if log.exists, log.reader?.containsSpendLimit == true {
                 try? await api.stop(sessionID)
                 setState(.held(reason: "API 지출 한도"), for: scenario.id)
                 markWaitingAsNotRun(reason: "API 지출 한도")
                 continuation.yield(.spendLimitReached)
+                logReaders[scenario.id] = nil
                 currentID = nil
                 currentSessionID = nil
                 return .spendLimit
@@ -292,16 +324,9 @@ public actor RunOrchestrator {
             let stallBaseline = [log.modifiedAt, stallRearmedAt[scenario.id]]
                 .compactMap { $0 }
                 .max()
-            if let length = log.text?.count {
-                lastLogLength[scenario.id] = length
-            }
-            // "계속 기다리기" 뒤에는 그 시점 이후 로그만 본다. 앞에 단계 요약 표지를 붙여 그 뒤의 반복만 세게 한다.
-            let stallLog = log.text.map { text -> String in
-                guard let offset = stallRearmedLogLength[scenario.id], offset <= text.count else { return text }
-                return "Generated summary for Step (계속 기다리기)\n" + String(text.dropFirst(offset))
-            }
+            // "계속 기다리기" 뒤에는 그 시점 이후 로그만 본다(rearmStall이 리더에 기준점을 남긴다).
             if !stallWarningsSent.contains(scenario.id), let signal = StallDetector.evaluate(
-                log: stallLog,
+                idleCount: log.exists ? log.reader?.idleCount : nil,
                 modifiedAt: stallBaseline,
                 now: Date()
             ) {
@@ -333,6 +358,7 @@ public actor RunOrchestrator {
                     .finished(sessionID: sessionID, artemis: sessionState.rawValue),
                     for: scenario.id
                 )
+                logReaders[scenario.id] = nil
                 currentID = nil
                 currentSessionID = nil
                 return .continued
@@ -358,7 +384,9 @@ public actor RunOrchestrator {
             return
         }
         stallRearmedAt[id] = Date()
-        stallRearmedLogLength[id] = lastLogLength[id]
+        if logReaders[id]?.hasRead == true {
+            logReaders[id]?.markIdleBaseline()
+        }
         stallWarningsSent.remove(id)
     }
 
@@ -368,6 +396,7 @@ public actor RunOrchestrator {
         }
         try? await api.stop(sessionID)
         setState(.held(reason: "사용자 중지"), for: id)
+        logReaders[id] = nil
         currentID = nil
         currentSessionID = nil
         if stopAllRequested {
@@ -402,24 +431,15 @@ public actor RunOrchestrator {
         }
     }
 
-    private func traceLog(sessionID: String) -> (text: String?, modifiedAt: Date?) {
-        let url = StallDetector.traceLog(
-            sessionID: sessionID,
-            artemisHome: artemisHome,
-            tracesDir: tracesDir
-        )
-        let text = try? String(contentsOf: url, encoding: .utf8)
-        let attributes = try? fileManager.attributesOfItem(atPath: url.path)
-        return (text, attributes?[.modificationDate] as? Date)
-    }
-
-    private func containsSpendLimit(_ log: String?) -> Bool {
-        guard let log else {
-            return false
+    /// 지난번 이후 새로 붙은 로그만 읽는다. 읽지 못했으면 exists가 false다.
+    private func readTraceLog(id: String) -> (exists: Bool, reader: LogTailReader?, modifiedAt: Date?) {
+        guard logReaders[id] != nil else {
+            return (false, nil, nil)
         }
-        return log.localizedCaseInsensitiveContains(
-            "You have reached your specified API usage limits"
-        ) || log.localizedCaseInsensitiveContains("enforced_spend_limit_reached")
+        let exists = logReaders[id]?.read() ?? false
+        let reader = logReaders[id]
+        let attributes = reader.flatMap { try? fileManager.attributesOfItem(atPath: $0.url.path) }
+        return (exists, reader, attributes?[.modificationDate] as? Date)
     }
 
     private func isWifiDown() async -> Bool {
@@ -452,13 +472,13 @@ public actor RunOrchestrator {
         }
     }
 
-    private func prepareRetryArtifacts(id: String) -> Bool {
+    private func prepareRetryArtifacts(id: String) -> RetryRefusal? {
         let directory = runDir
             .appending(path: "artifacts", directoryHint: .isDirectory)
             .appending(path: id, directoryHint: .isDirectory)
         let try1 = directory.appending(path: "try1", directoryHint: .isDirectory)
         guard !fileManager.fileExists(atPath: try1.path) else {
-            return false
+            return .alreadyRetried
         }
 
         do {
@@ -471,9 +491,9 @@ public actor RunOrchestrator {
             for item in contents {
                 try fileManager.moveItem(at: item, to: try1.appending(path: item.lastPathComponent))
             }
-            return true
+            return nil
         } catch {
-            return false
+            return .moveFailed
         }
     }
 }

@@ -7,6 +7,29 @@ public struct ArtemisDevice: Decodable, Hashable, Sendable {
     public let is_busy: Bool?
 }
 
+/// 승인 창의 기기 목록. 쓸 수 있는 기기만 고르게 하고 뺀 기기 수를 따로 센다.
+public struct DeviceChoices: Equatable, Sendable {
+    public let usable: [ArtemisDevice]
+    public let busyCount: Int
+    public let unavailableCount: Int
+}
+
+extension ArtemisDevice {
+    /// adb 상태가 `device`이고 다른 세션이 쓰고 있지 않다.
+    public var isUsable: Bool {
+        state == "device" && is_busy != true
+    }
+
+    public static func choices(from devices: [ArtemisDevice]) -> DeviceChoices {
+        let connected = devices.filter { $0.state == "device" }
+        return DeviceChoices(
+            usable: connected.filter(\.isUsable),
+            busyCount: connected.count { $0.is_busy == true },
+            unavailableCount: devices.count - connected.count
+        )
+    }
+}
+
 public enum SessionState: String, Decodable, Sendable {
     case running
     case completed
@@ -178,7 +201,21 @@ public enum StallDetector {
     public static let frozenSeconds = 300
     public static let idleLimit = 12
 
+    static let summaryMarker = "Generated summary for Step"
+    static let idleMarker = "LLM stopped without calling any tool"
+
     public static func evaluate(log: String?, modifiedAt: Date?, now: Date) -> StallSignal? {
+        let idleCount = log.flatMap { log -> Int? in
+            guard let summary = log.range(of: summaryMarker, options: .backwards) else {
+                return nil
+            }
+            return log[summary.upperBound...].components(separatedBy: idleMarker).count - 1
+        }
+        return evaluate(idleCount: idleCount, modifiedAt: modifiedAt, now: now)
+    }
+
+    /// idleCount는 마지막 단계 요약 뒤의 "도구 없이 멈춤" 횟수다. 요약이 없으면 nil.
+    public static func evaluate(idleCount: Int?, modifiedAt: Date?, now: Date) -> StallSignal? {
         if let modifiedAt {
             let seconds = Int(now.timeIntervalSince(modifiedAt))
             if seconds > frozenSeconds {
@@ -186,12 +223,9 @@ public enum StallDetector {
             }
         }
 
-        guard let log,
-              let summary = log.range(of: "Generated summary for Step", options: .backwards) else {
+        guard let count = idleCount else {
             return nil
         }
-        let marker = "LLM stopped without calling any tool"
-        let count = log[summary.upperBound...].components(separatedBy: marker).count - 1
         return count >= idleLimit ? .idleLoop(count: count) : nil
     }
 

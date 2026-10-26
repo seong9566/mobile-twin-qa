@@ -117,6 +117,69 @@ private func claudeRunnerTempDir() throws -> URL {
     #expect(Date().timeIntervalSince(cancelledAt) < 5)
 }
 
+@Test func nonzeroExitCarriesStderrTail() async throws {
+    let directory = try claudeRunnerTempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let executable = directory.appending(path: "failing-claude.sh")
+    try "#!/bin/sh\necho 'first' >&2\necho 'Error: 인증이 만료됐어요' >&2\necho '' >&2\nexit 3\n"
+        .write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let runner = ClaudeRunner(executable: executable, workspaceRoot: directory)
+    await #expect(throws: ClaudeRunnerError.nonzeroExit(3, stderrTail: "first\nError: 인증이 만료됐어요")) {
+        for try await _ in runner.run(prompt: "test") {}
+    }
+}
+
+@Test func stderrTailKeepsLastLinesWithinLimit() {
+    let long = String(repeating: "a", count: 290)
+    let data = Data("old\n\(long)\n\nlast line\n".utf8)
+    #expect(ClaudeRunnerError.stderrTail(from: data) == "\(long)\nlast line")
+
+    let huge = String(repeating: "b", count: 400) + "끝"
+    #expect(ClaudeRunnerError.stderrTail(from: Data(huge.utf8)) == String(huge.suffix(300)))
+    #expect(ClaudeRunnerError.stderrTail(from: Data()) == "")
+}
+
+@Test func cancelKillsChildProcessGroup() async throws {
+    let directory = try claudeRunnerTempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+
+    let pidFile = directory.appending(path: "child.pid")
+    let executable = directory.appending(path: "spawning-claude.sh")
+    // 자식은 SIGTERM을 무시하므로 5초 뒤 그룹 SIGKILL로만 끝난다.
+    try "#!/bin/sh\n(trap '' TERM; exec sleep 30) &\necho $! > '\(pidFile.path)'\nwait\n"
+        .write(to: executable, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+
+    let runner = ClaudeRunner(executable: executable, workspaceRoot: directory)
+    let stream = runner.run(prompt: "test")
+    let consumer = Task {
+        do {
+            for try await _ in stream {}
+        } catch {}
+    }
+
+    var childPID: Int32?
+    for _ in 0..<50 where childPID == nil {
+        try await Task.sleep(for: .milliseconds(100))
+        childPID = (try? String(contentsOf: pidFile, encoding: .utf8))
+            .flatMap { Int32($0.trimmingCharacters(in: .whitespacesAndNewlines)) }
+    }
+    let pid = try #require(childPID)
+    #expect(kill(pid, 0) == 0)
+
+    let cancelledAt = Date()
+    runner.cancel()
+    while kill(pid, 0) == 0, Date().timeIntervalSince(cancelledAt) < 10 {
+        try await Task.sleep(for: .milliseconds(100))
+    }
+    #expect(kill(pid, 0) != 0)
+    consumer.cancel()
+    await consumer.value
+}
+
 @Test func parsesRateLimitEvent() {
     let line = #"{"type":"rate_limit_event","rate_limit_info":{"status":"allowed","unifiedWindows":{"five_hour":{"utilization":0.22,"resetsAt":1793005800,"status":"allowed"},"seven_day":{"utilization":0.31,"resetsAt":1793296800,"status":"allowed"}}}}"#
     guard case let .rateLimits(limits)? = StreamJSONParser.parse(line: line).first else {

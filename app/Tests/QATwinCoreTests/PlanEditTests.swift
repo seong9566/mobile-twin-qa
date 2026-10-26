@@ -53,4 +53,8 @@ private func date(_ value: String) -> Date {
 @Test func safetyLint() {
     #expect(!SafetyLint.warnings(goal: "비상 연락처에 전화를 걸어 확인해").isEmpty)
     #expect(SafetyLint.warnings(goal: "전화 확인 시트가 뜨면 '전화'는 누르지 마").isEmpty)
+    #expect(
+        SafetyLint.warnings(goal: "전화 버튼은 누르지 마. 그다음 삭제를 눌러.")
+            == ["'삭제' 동작이 있는데 \"누르지 마\"가 없어요"]
+    )
 }

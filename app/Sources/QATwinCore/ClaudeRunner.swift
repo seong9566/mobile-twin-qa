@@ -131,8 +131,42 @@ public enum StreamJSONParser {
     }
 }
 
-public enum ClaudeRunnerError: Error, Equatable, Sendable {
-    case nonzeroExit(Int32)
+public enum ClaudeRunnerError: Error, Equatable, Sendable, LocalizedError {
+    /// stderrTail은 앱 오류 알림에만 보여 주고 파일에는 쓰지 않는다.
+    case nonzeroExit(Int32, stderrTail: String)
+
+    static let stderrKeepBytes = 4096
+    static let stderrTailMaxCharacters = 300
+
+    public var errorDescription: String? {
+        switch self {
+        case let .nonzeroExit(status, stderrTail):
+            let head = "Claude Code가 종료 코드 \(status)로 끝났어요."
+            return stderrTail.isEmpty ? head : head + "\n" + stderrTail
+        }
+    }
+
+    /// stderr 끝에서 비어 있지 않은 줄을 최대 300자까지 모은다.
+    static func stderrTail(from data: Data) -> String {
+        let lines = String(decoding: data, as: UTF8.self)
+            .components(separatedBy: .newlines)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        var picked: [String] = []
+        var length = 0
+        for line in lines.reversed() {
+            let added = line.count + (picked.isEmpty ? 0 : 1)
+            if length + added > stderrTailMaxCharacters {
+                if picked.isEmpty {
+                    picked.append(String(line.suffix(stderrTailMaxCharacters)))
+                }
+                break
+            }
+            picked.append(line)
+            length += added
+        }
+        return picked.reversed().joined(separator: "\n")
+    }
 }
 
 private final class ClaudeStreamState: @unchecked Sendable {
@@ -141,6 +175,8 @@ private final class ClaudeStreamState: @unchecked Sendable {
     private var finished = false
     private let lock = NSLock()
     private var resultSeen = false
+    private var stderrBuffer = Data()
+    private let stderrReadLock = NSLock()
 
     init(continuation: AsyncThrowingStream<ClaudeEvent, Error>.Continuation) {
         self.continuation = continuation
@@ -155,19 +191,49 @@ private final class ClaudeStreamState: @unchecked Sendable {
         events.forEach { continuation.yield($0) }
     }
 
+    /// stderr를 Darwin.read로 읽는다(예외를 던지지 않는다). 읽기와 쌓기를 한 잠금 안에서 해 순서를 지킨다.
+    /// drain이 false면 한 번만 읽고, true면 더 읽을 것이 없을 때까지 읽는다. EOF를 만나면 true를 돌려준다.
+    @discardableResult
+    func readStderr(from descriptor: Int32, drain: Bool) -> Bool {
+        stderrReadLock.withLock {
+            var chunk = [UInt8](repeating: 0, count: 4096)
+            while true {
+                let count = chunk.withUnsafeMutableBytes { Darwin.read(descriptor, $0.baseAddress, $0.count) }
+                if count == 0 {
+                    return true
+                }
+                guard count > 0 else {
+                    return false
+                }
+                lock.withLock {
+                    stderrBuffer.append(contentsOf: chunk[..<count])
+                    if stderrBuffer.count > ClaudeRunnerError.stderrKeepBytes {
+                        stderrBuffer = Data(stderrBuffer.suffix(ClaudeRunnerError.stderrKeepBytes))
+                    }
+                }
+                if !drain {
+                    return false
+                }
+            }
+        }
+    }
+
     func finish(status: Int32) {
-        let result: (events: [ClaudeEvent], sawResult: Bool)? = lock.withLock {
+        let result: (events: [ClaudeEvent], sawResult: Bool, stderr: Data)? = lock.withLock {
             guard !finished else { return nil }
             finished = true
             let lines = buffer.isEmpty ? [] : [String(decoding: buffer, as: UTF8.self)]
             buffer.removeAll()
             let events = events(for: lines)
-            return (events, resultSeen)
+            return (events, resultSeen, stderrBuffer)
         }
         guard let result else { return }
         result.events.forEach { continuation.yield($0) }
         if status != 0 && !result.sawResult {
-            continuation.finish(throwing: ClaudeRunnerError.nonzeroExit(status))
+            continuation.finish(throwing: ClaudeRunnerError.nonzeroExit(
+                status,
+                stderrTail: ClaudeRunnerError.stderrTail(from: result.stderr)
+            ))
         } else {
             continuation.finish()
         }
@@ -229,6 +295,7 @@ public final class ClaudeRunner: @unchecked Sendable {
 
     public func run(prompt: String) -> AsyncThrowingStream<ClaudeEvent, Error> {
         AsyncThrowingStream { continuation in
+            let errorOutput = Pipe()
             let output = Pipe()
             let process = Process()
             let state = ClaudeStreamState(continuation: continuation)
@@ -250,7 +317,7 @@ public final class ClaudeRunner: @unchecked Sendable {
             process.currentDirectoryURL = workspaceRoot
             process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, value in value }
             process.executableURL = executable
-            process.standardError = FileHandle.nullDevice
+            process.standardError = errorOutput
             process.standardOutput = output
 
             output.fileHandleForReading.readabilityHandler = { handle in
@@ -259,9 +326,21 @@ public final class ClaudeRunner: @unchecked Sendable {
                     state.receive(data)
                 }
             }
+            let errorDescriptor = errorOutput.fileHandleForReading.fileDescriptor
+            errorOutput.fileHandleForReading.readabilityHandler = { handle in
+                if state.readStderr(from: errorDescriptor, drain: false) {
+                    handle.readabilityHandler = nil
+                }
+            }
             process.terminationHandler = { [weak self] terminatedProcess in
                 output.fileHandleForReading.readabilityHandler = nil
+                errorOutput.fileHandleForReading.readabilityHandler = nil
+                // 자식(gradle 등)이 stderr를 물고 있어도 멈추지 않게 남은 stderr는 논블로킹으로 읽는다.
+                let flags = fcntl(errorDescriptor, F_GETFL)
+                _ = fcntl(errorDescriptor, F_SETFL, flags | O_NONBLOCK)
+                state.readStderr(from: errorDescriptor, drain: true)
                 // 핸들러가 꺼지기 전에 읽지 못한 마지막 출력(result 이벤트 등)을 마저 읽는다.
+                // stdout은 EOF까지 막고 읽으므로 자식이 stdout을 물고 있으면 그 자식이 끝날 때까지 기다린다.
                 let rest = output.fileHandleForReading.readDataToEndOfFile()
                 if !rest.isEmpty {
                     state.receive(rest)
@@ -274,9 +353,11 @@ public final class ClaudeRunner: @unchecked Sendable {
                 lock.withLock {
                     self.process = process
                 }
+                // Process는 자식을 자기 프로세스 그룹(pgid = pid)에 두므로 cancel()이 그룹째 끝낼 수 있다.
                 try process.run()
             } catch {
                 output.fileHandleForReading.readabilityHandler = nil
+                errorOutput.fileHandleForReading.readabilityHandler = nil
                 clear(process)
                 state.fail(error)
             }
@@ -290,8 +371,16 @@ public final class ClaudeRunner: @unchecked Sendable {
         }
 
         let processIdentifier = runningProcess.processIdentifier
+        let ownsGroup = getpgid(processIdentifier) == processIdentifier
+        if ownsGroup {
+            Darwin.kill(-processIdentifier, SIGTERM)
+        }
         runningProcess.terminate()
         DispatchQueue.global().asyncAfter(deadline: .now() + 5) { [weak self] in
+            // 그룹에 남은 프로세스가 있으면 강제로 끝낸다. 그룹이 사라졌으면 kill(-pgid, 0)이 실패한다.
+            if ownsGroup, Darwin.kill(-processIdentifier, 0) == 0 {
+                Darwin.kill(-processIdentifier, SIGKILL)
+            }
             self?.killIfRunning(processIdentifier: processIdentifier)
         }
     }
