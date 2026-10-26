@@ -14,23 +14,16 @@ struct ResultCard: View {
             rawValues
             // 영상이 남는 높이를 다 쓰도록 폰 화면 비율(1080×2400)로 폭을 정한다.
             GeometryReader { proxy in
-                let videoHeight = max(proxy.size.height - Self.captionHeight, 320)
-                let videoWidth = min(max(videoHeight * Self.phoneAspect, 240), proxy.size.width * 0.45)
+                // 영상은 남는 높이에 맞춰 폰 화면 비율(1080×2400)로 정한다. 창이 낮으면 그만큼 작아진다.
+                let videoHeight = max(proxy.size.height - Self.captionHeight, 0)
+                let videoWidth = min(videoHeight * Self.phoneAspect, proxy.size.width * 0.45)
                 HStack(alignment: .top, spacing: 22) {
                     video(width: videoWidth, height: videoWidth / Self.phoneAspect)
-                    VStack(alignment: .leading, spacing: 16) {
-                        expectedActual
+                    // 공간이 넉넉하면 메모 칸이 남는 높이를 채우고, 모자라면 오른쪽 칸만 스크롤한다.
+                    ViewThatFits(in: .vertical) {
+                        detailColumn(fillsHeight: true)
                         ScrollView {
-                            checks
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-                        .frame(maxHeight: result.outcome == .pass ? .infinity : 260)
-                        .fixedSize(horizontal: false, vertical: result.outcome != .pass)
-                        if result.outcome != .pass {
-                            memo
-                            actions
-                        } else {
-                            Spacer(minLength: 0)
+                            detailColumn(fillsHeight: false)
                         }
                     }
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -43,7 +36,25 @@ struct ResultCard: View {
         .background(Color.qaBackground)
     }
 
+    private func detailColumn(fillsHeight: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            expectedActual
+            ScrollView {
+                checks
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 260)
+            .fixedSize(horizontal: false, vertical: true)
+            if result.outcome != .pass {
+                memo(fillsHeight: fillsHeight)
+                actions
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: fillsHeight ? .infinity : nil, alignment: .topLeading)
+    }
+
     private static let phoneAspect: CGFloat = 1080.0 / 2400.0
+    /// 영상 아래 경로 캡션: 간격 6 + 11pt 한 줄 ≈ 20, 여유를 둬 26.
     private static let captionHeight: CGFloat = 26
 
     private var header: some View {
@@ -159,14 +170,14 @@ struct ResultCard: View {
         }
     }
 
-    private var memo: some View {
+    private func memo(fillsHeight: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("수정할 점 — md에 그대로 들어가요")
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Color.qaSecondaryText)
             TextEditor(text: memoBinding)
                 .font(.system(size: 13))
-                .frame(minHeight: 120, maxHeight: .infinity)
+                .frame(minHeight: 100, maxHeight: fillsHeight ? .infinity : 160)
                 .padding(4)
                 .scrollContentBackground(.hidden)
                 .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 6))
@@ -259,7 +270,7 @@ struct ResultCard: View {
             Text(label)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Color.qaTertiaryText)
-            Text(value).lineSpacing(3)
+            Text(value).lineSpacing(3).lineLimit(8)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
