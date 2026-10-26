@@ -24,6 +24,12 @@ public struct Usage: Codable, Equatable, Sendable {
     public let llm_calls: Int
     public let prompt_tokens: Int
     public let completion_tokens: Int
+
+    public init(llm_calls: Int, prompt_tokens: Int, completion_tokens: Int) {
+        self.llm_calls = llm_calls
+        self.prompt_tokens = prompt_tokens
+        self.completion_tokens = completion_tokens
+    }
 }
 
 public enum ArtemisError: Error, Equatable {

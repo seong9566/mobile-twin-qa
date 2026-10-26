@@ -15,7 +15,9 @@ let package = Package(
         .target(name: "QATwinCore"),
         .executableTarget(
             name: "QATwinApp",
-            dependencies: ["QATwinCore"]
+            dependencies: ["QATwinCore"],
+            // SwiftUI VideoPlayer가 쓰는 AVPlayerView를 실행 시 찾을 수 있게 명시적으로 링크한다.
+            linkerSettings: [.linkedFramework("AVKit")]
         ),
         .testTarget(
             name: "QATwinCoreTests",

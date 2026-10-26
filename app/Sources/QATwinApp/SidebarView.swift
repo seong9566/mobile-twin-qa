@@ -136,7 +136,7 @@ struct SidebarView: View {
             .padding(.horizontal, 8)
             .padding(.leading, 16)
             .background(
-                appModel.selectedRun == run ? Color.qaAccentWeak : .clear,
+                appModel.selectedRun?.resolvingSymlinksInPath().path == run.resolvingSymlinksInPath().path ? Color.qaAccentWeak : .clear,
                 in: RoundedRectangle(cornerRadius: 6)
             )
         }

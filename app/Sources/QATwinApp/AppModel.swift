@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import QATwinCore
@@ -15,6 +16,7 @@ enum AppPhase: Equatable {
     case stage(Stage)
     case reviewing
     case running(runDir: URL)
+    case results(runDir: URL)
 }
 
 struct AppNotice: Identifiable {
@@ -52,8 +54,32 @@ final class AppModel {
     var stageStartedAt: Date?
     var stageIsRunning = false
     var rateLimits: ClaudeRateLimits?
+    var runEvents: [RunEvent] = []
+    var runStates: [String: ScenarioRunState] = [:]
+    var runUsage = Usage(llm_calls: 0, prompt_tokens: 0, completion_tokens: 0)
+    var runDeviceSerial = ""
+    var runServer = ""
+    var runScenarioCalls: [String: Int] = [:]
+    var runStartedAt: [String: Date] = [:]
+    var runFinishedAt: [String: Date] = [:]
+    var stallSignals: [String: StallSignal] = [:]
+    var wifiDownScenarioIDs: Set<String> = []
+    var humanActionNotes: [String: String] = [:]
+    var spendLimitReached = false
+    var artemisLog = ""
+    var runResults: RunResults?
+    var runTotals: RunTotals?
+    var review = Review()
+    var selectedResultID: String?
+    var isFixRequestPresented = false
+    var judgeDuration: TimeInterval?
+    var pendingCommitFiles: [String] = []
+    var isCommitConfirmationPresented = false
 
     @ObservationIgnored private var claudeRunner: ClaudeRunner?
+    @ObservationIgnored private var isTerminating = false
+    @ObservationIgnored private var reviewSaveTask: Task<Void, Never>?
+    @ObservationIgnored private var runOrchestrator: RunOrchestrator?
 
     init() {
         rateLimits = ClaudeRateLimits.read()
@@ -165,6 +191,26 @@ final class AppModel {
 
     func selectRun(_ url: URL) {
         selectedRun = url
+        do {
+            try loadResults(from: url)
+        } catch {
+            notice = AppNotice(title: "결과를 열지 못했어요", message: error.localizedDescription)
+        }
+    }
+
+    func openRun(at url: URL) {
+        guard let project = projects.first(where: {
+            url.standardizedFileURL.path.hasPrefix($0.dir.standardizedFileURL.path + "/")
+        }) else {
+            notice = AppNotice(title: "실행을 열지 못했어요", message: "실행 폴더에 해당하는 프로젝트를 찾지 못했어요.")
+            return
+        }
+        selectedProject = project
+        let planName = url.deletingLastPathComponent().lastPathComponent + ".md"
+        if let planURL = plans(for: project).first(where: { $0.lastPathComponent == planName }) {
+            try? selectPlan(at: planURL)
+        }
+        selectRun(url)
     }
 
     func saveEdits(_ scenario: Scenario) throws {
@@ -217,6 +263,7 @@ final class AppModel {
     func startRun(_ approval: Approval) async {
         guard let workspace, let project = selectedProject, let plan = selectedPlan else { return }
         isApprovalPresented = false
+        Notifier.requestAuthorization()
         do {
             let runDir = try makeRunDirectory(workspace: workspace, project: project, plan: plan.url)
             let prompt = StagePrompt.prepare(
@@ -237,11 +284,191 @@ final class AppModel {
                 return
             }
             selectedRun = runDir
+            runDeviceSerial = approval.deviceSerial
+            runServer = approval.server
+            let scenarios = orderedScenarios.filter { approval.scenarioIDs.contains($0.id) }
+            resetRunState(for: scenarios)
+            let orchestrator = makeOrchestrator(
+                runDir: runDir,
+                plan: plan,
+                scenarios: scenarios,
+                deviceSerial: approval.deviceSerial,
+                server: approval.server
+            )
+            runOrchestrator = orchestrator
             phase = .running(runDir: runDir)
+            await consumeRun(orchestrator, starting: { await orchestrator.start() }, runDir: runDir)
         } catch {
             phase = .reviewing
             show(error)
         }
+    }
+
+    func stopCurrentAsHeld() async {
+        stallSignals.removeValue(forKey: currentRunningScenarioID ?? "")
+        await runOrchestrator?.stopCurrentAsHeld()
+    }
+
+    func stopAll() async {
+        await runOrchestrator?.stopAll()
+        claudeRunner?.cancel()
+    }
+
+    func stopAllForTermination() async {
+        isTerminating = true
+        await stopAll()
+        while hasActiveExecution {
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        claudeRunner?.cancel()
+    }
+
+    func keepWaiting(id: String) {
+        stallSignals.removeValue(forKey: id)
+    }
+
+    func refreshCurrentArtemisLog() {
+        guard let sessionID = currentSessionID else {
+            artemisLog = ""
+            return
+        }
+        let url = StallDetector.traceLog(
+            sessionID: sessionID,
+            artemisHome: URL(fileURLWithPath: expandedPath(artemisHome)),
+            tracesDir: artemisTracesDir.isEmpty
+                ? nil
+                : URL(fileURLWithPath: expandedPath(artemisTracesDir))
+        )
+        guard let text = try? String(contentsOf: url, encoding: .utf8) else {
+            artemisLog = "로그를 기다리고 있어요."
+            return
+        }
+        artemisLog = text.components(separatedBy: .newlines).suffix(200).joined(separator: "\n")
+    }
+
+    func updateMemo(id: String, memo: String) {
+        guard let result = result(id: id) else { return }
+        var entry = review.entry(for: result)
+        entry.memo = memo
+        review.entries[id] = entry
+        scheduleReviewSave()
+    }
+
+    func updateCause(id: String, cause: Cause?) {
+        guard let result = result(id: id) else { return }
+        var entry = review.entry(for: result)
+        entry.causeOverride = cause
+        if let cause {
+            entry.include = cause != .toolMisjudgment
+        }
+        review.entries[id] = entry
+        scheduleReviewSave()
+    }
+
+    func updateInclude(id: String, include: Bool) {
+        guard let result = result(id: id) else { return }
+        var entry = review.entry(for: result)
+        entry.include = include
+        review.entries[id] = entry
+        scheduleReviewSave()
+    }
+
+    func reviewEntry(for result: ScenarioResult) -> ReviewEntry {
+        review.entry(for: result)
+    }
+
+    func effectiveCause(for result: ScenarioResult) -> Cause? {
+        review.entry(for: result).causeOverride ?? result.cause
+    }
+
+    var includedResultCount: Int {
+        guard let runResults else { return 0 }
+        return runResults.scenarios.count { review.entry(for: $0).include }
+    }
+
+    var fixRequestMarkdown: String {
+        guard let runResults, let selectedRun, let selectedProject else { return "" }
+        return FixRequestRenderer.render(
+            results: runResults,
+            plan: selectedPlan,
+            review: review,
+            project: selectedProject.name,
+            runDirRelative: workspace.map { relativePath(selectedRun, from: $0.root) } ?? selectedRun.path
+        )
+    }
+
+    func exportFixRequest(to url: URL) throws {
+        try fixRequestMarkdown.write(to: url, atomically: true, encoding: .utf8)
+    }
+
+    func copyFixRequest() {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(fixRequestMarkdown, forType: .string)
+    }
+
+    func prepareCommit() async {
+        guard let workspace, let project = selectedProject, project.category == .personal else { return }
+        do {
+            reviewSaveTask?.cancel()
+            if let selectedRun { try review.save(runDir: selectedRun) }
+            let projectPath = relativePath(project.dir, from: workspace.root)
+            let result = try await ProcessShellRunner().run(
+                "/usr/bin/git",
+                ["-C", workspace.root.path, "status", "--porcelain=v1", "-z", "--", projectPath]
+            )
+            guard result.status == 0 else {
+                throw shellError(result.out)
+            }
+            pendingCommitFiles = commitFiles(from: result.out)
+            if pendingCommitFiles.isEmpty {
+                notice = AppNotice(title: "커밋할 파일이 없어요", message: "프로젝트 폴더에 바뀐 파일이 없어요.")
+            } else {
+                isCommitConfirmationPresented = true
+            }
+        } catch {
+            show(error)
+        }
+    }
+
+    func commitResults() async {
+        guard let workspace, let project = selectedProject, let selectedRun,
+              project.category == .personal, !pendingCommitFiles.isEmpty
+        else { return }
+        isCommitConfirmationPresented = false
+        do {
+            let shell = ProcessShellRunner()
+            let add = try await shell.run(
+                "/usr/bin/git",
+                ["-C", workspace.root.path, "add", "--"] + pendingCommitFiles
+            )
+            guard add.status == 0 else { throw shellError(add.out) }
+            let stat = try await shell.run(
+                "/usr/bin/git",
+                ["-C", workspace.root.path, "diff", "--cached", "--stat", "--"] + pendingCommitFiles
+            )
+            guard stat.status == 0 else { throw shellError(stat.out) }
+            let message = "test(\(project.name)): \(selectedRun.lastPathComponent) 실행 결과"
+            let commit = try await shell.run(
+                "/usr/bin/git",
+                ["-C", workspace.root.path, "commit", "-m", message, "--"] + pendingCommitFiles
+            )
+            guard commit.status == 0 else { throw shellError(commit.out) }
+            let push = try await shell.run("/usr/bin/git", ["-C", workspace.root.path, "push"])
+            guard push.status == 0 else { throw shellError(push.out) }
+            pendingCommitFiles = []
+            notice = AppNotice(title: "커밋했어요", message: message)
+        } catch {
+            show(error)
+        }
+    }
+
+    func retryScenario(_ id: String) async {
+        guard let orchestrator = runOrchestrator, let runDir = selectedRun else {
+            notice = AppNotice(title: "다시 돌릴 수 없어요", message: "이 앱 실행 중에 만든 결과에서만 다시 돌릴 수 있어요.")
+            return
+        }
+        phase = .running(runDir: runDir)
+        await consumeRun(orchestrator, starting: { await orchestrator.retry(id: id) }, runDir: runDir)
     }
 
     func cancelStage() {
@@ -358,6 +585,201 @@ final class AppModel {
         }
     }
 
+    private var currentRunningScenarioID: String? {
+        runStates.first { _, state in
+            if case .running = state { return true }
+            return false
+        }?.key
+    }
+
+    private var hasActiveExecution: Bool {
+        if case .running = phase { return true }
+        return stageIsRunning
+    }
+
+    private var currentSessionID: String? {
+        guard let id = currentRunningScenarioID,
+              case .running(let sessionID) = runStates[id]
+        else { return nil }
+        return sessionID
+    }
+
+    private func resetRunState(for scenarios: [Scenario]) {
+        runEvents = []
+        runStates = Dictionary(uniqueKeysWithValues: scenarios.map { ($0.id, .waiting) })
+        runUsage = Usage(llm_calls: 0, prompt_tokens: 0, completion_tokens: 0)
+        runStartedAt = [:]
+        runFinishedAt = [:]
+        runScenarioCalls = [:]
+        stallSignals = [:]
+        wifiDownScenarioIDs = []
+        humanActionNotes = [:]
+        spendLimitReached = false
+        artemisLog = ""
+    }
+
+    private func makeOrchestrator(
+        runDir: URL,
+        plan: PlanDocument,
+        scenarios: [Scenario],
+        deviceSerial: String,
+        server: String
+    ) -> RunOrchestrator {
+        RunOrchestrator(
+            api: ArtemisClient(base: URL(string: artemisURL) ?? URL(string: "http://127.0.0.1:8100")!),
+            shell: ProcessShellRunner(),
+            runDir: runDir,
+            plan: plan,
+            scenarios: scenarios,
+            deviceSerial: deviceSerial,
+            server: server,
+            artemisHome: URL(fileURLWithPath: expandedPath(artemisHome)),
+            tracesDir: artemisTracesDir.isEmpty
+                ? nil
+                : URL(fileURLWithPath: expandedPath(artemisTracesDir))
+        )
+    }
+
+    private func consumeRun(
+        _ orchestrator: RunOrchestrator,
+        starting operation: @escaping @Sendable () async -> Void,
+        runDir: URL
+    ) async {
+        let operationTask = Task { await operation() }
+        for await event in orchestrator.events {
+            handle(event)
+            if case .finished = event { break }
+        }
+        await operationTask.value
+        guard !isTerminating else {
+            phase = .empty
+            return
+        }
+        guard let project = selectedProject, let plan = selectedPlan else { return }
+        let started = Date.now
+        _ = await runStage(
+            .judge,
+            prompt: StagePrompt.judge(
+                project: project,
+                plan: workspace.map { relativePath(plan.url, from: $0.root) } ?? plan.url.path,
+                runDir: workspace.map { relativePath(runDir, from: $0.root) } ?? runDir.path
+            )
+        )
+        judgeDuration = Date.now.timeIntervalSince(started)
+        do {
+            try loadResults(from: runDir)
+        } catch {
+            phase = .results(runDir: runDir)
+            show(error)
+        }
+    }
+
+    private func handle(_ event: RunEvent) {
+        runEvents.append(event)
+        switch event {
+        case .state(let id, let state):
+            runStates[id] = state
+            switch state {
+            case .running:
+                runStartedAt[id] = runStartedAt[id] ?? .now
+            case .finished, .held, .notRun:
+                runFinishedAt[id] = .now
+            case .waiting:
+                break
+            }
+        case .usage(let usage):
+            runUsage = usage
+            if let id = currentRunningScenarioID {
+                let completed = runStates.reduce(into: 0) { total, pair in
+                    guard pair.key != id, case .finished = pair.value, let selectedRun else { return }
+                    total += usageCalls(run: selectedRun, id: pair.key)
+                }
+                runScenarioCalls[id] = max(0, usage.llm_calls - completed)
+            }
+        case .stall(let id, let signal):
+            stallSignals[id] = signal
+            Notifier.send(title: "\(id): 멈춤 의심", body: stallDescription(signal))
+        case .wifiDown(let id):
+            wifiDownScenarioIDs.insert(id)
+            Notifier.send(title: "\(id): Wi-Fi 끊김", body: "고친 뒤 끝나면 다시 돌릴 수 있어요.")
+        case .humanAction(let id, let note):
+            humanActionNotes[id] = note
+            Notifier.send(title: "\(id): \(note)", body: "사람이 할 동작을 진행해 주세요.")
+        case .spendLimitReached:
+            spendLimitReached = true
+            Notifier.send(
+                title: "API 지출 한도",
+                body: "Console에서 한도를 확인해 주세요."
+            )
+        case .finished:
+            break
+        }
+    }
+
+    private func loadResults(from runDir: URL) throws {
+        let loaded = try RunResults.load(runDir: runDir)
+        selectedRun = runDir
+        runResults = loaded
+        runTotals = RunTotals.compute(loaded, runDir: runDir)
+        review = Review.load(runDir: runDir)
+        selectedResultID = loaded.scenarios.first(where: { $0.outcome != .pass })?.id
+            ?? loaded.scenarios.first?.id
+        phase = .results(runDir: runDir)
+    }
+
+    private func result(id: String) -> ScenarioResult? {
+        runResults?.scenarios.first(where: { $0.id == id })
+    }
+
+    private func scheduleReviewSave() {
+        guard let selectedRun else { return }
+        reviewSaveTask?.cancel()
+        let value = review
+        reviewSaveTask = Task {
+            try? await Task.sleep(for: .milliseconds(500))
+            guard !Task.isCancelled else { return }
+            try? value.save(runDir: selectedRun)
+        }
+    }
+
+    private func stallDescription(_ signal: StallSignal) -> String {
+        switch signal {
+        case .logFrozen(let seconds):
+            return "Artemis 로그가 \(seconds / 60)분째 그대로예요."
+        case .idleLoop(let count):
+            return "도구 호출 없이 멈춘 응답이 \(count)회 이어졌어요."
+        }
+    }
+
+    private func shellError(_ output: String) -> NSError {
+        NSError(
+            domain: "QATwinApp.Shell",
+            code: 1,
+            userInfo: [NSLocalizedDescriptionKey: output.isEmpty ? "명령 실행에 실패했어요." : output]
+        )
+    }
+
+    private func commitFiles(from output: String) -> [String] {
+        let records = output.split(separator: "\0", omittingEmptySubsequences: true).map(String.init)
+        var files: [String] = []
+        var index = 0
+        while index < records.count {
+            let record = records[index]
+            guard record.count >= 4 else {
+                index += 1
+                continue
+            }
+            let status = String(record.prefix(2))
+            files.append(String(record.dropFirst(3)))
+            if status.contains("R") || status.contains("C") {
+                index += 1
+                if index < records.count { files.append(records[index]) }
+            }
+            index += 1
+        }
+        return Array(Set(files)).sorted()
+    }
+
     private func handle(_ event: ClaudeEvent) {
         switch event {
         case .text(let text):
@@ -434,7 +856,7 @@ final class AppModel {
         NSString(string: path).expandingTildeInPath
     }
 
-    private func usageCalls(run: URL, id: String) -> Int {
+    func usageCalls(run: URL, id: String) -> Int {
         struct UsageFile: Decodable { let llm_calls: Int }
         let url = run.appending(path: "artifacts/\(id)/usage.json")
         guard let data = try? Data(contentsOf: url),

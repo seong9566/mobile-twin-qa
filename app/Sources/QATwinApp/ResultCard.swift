@@ -1,0 +1,284 @@
+import AVKit
+import Foundation
+import QATwinCore
+import SwiftUI
+
+struct ResultCard: View {
+    @Bindable var appModel: AppModel
+    let result: ScenarioResult
+    let runDir: URL
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                header
+                rawValues
+                HStack(alignment: .top, spacing: 18) {
+                    video
+                    VStack(alignment: .leading, spacing: 14) {
+                        expectedActual
+                        checks
+                        if result.outcome != .pass {
+                            memo
+                            actions
+                        }
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                }
+            }
+            .padding(.horizontal, 22)
+            .padding(.vertical, 18)
+        }
+    }
+
+    private var header: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(result.id)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(Color.qaSecondaryText)
+                Text(title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
+                outcomeLabel
+                    .fixedSize()
+                Spacer(minLength: 0)
+            }
+            if result.outcome != .pass {
+                HStack(spacing: 8) {
+                    Text("원인")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.qaSecondaryText)
+                    Picker("원인", selection: causeBinding) {
+                        Text("앱 결함").tag(Optional(Cause.appDefect))
+                        Text("도구 오판").tag(Optional(Cause.toolMisjudgment))
+                        Text("환경").tag(Optional(Cause.environment))
+                        Text("미정").tag(Optional<Cause>.none)
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.segmented)
+                    .fixedSize()
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var rawValues: some View {
+        if result.rawOutcome != nil || result.rawCause != nil {
+            HStack(spacing: 12) {
+                if let rawOutcome = result.rawOutcome {
+                    Text("원래 결과: \(rawOutcome)")
+                }
+                if let rawCause = result.rawCause {
+                    Text("원래 판정: \(rawCause)")
+                }
+            }
+            .font(.system(size: 11))
+            .foregroundStyle(Color.qaTertiaryText)
+        }
+    }
+
+    private var video: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Group {
+                if let url = Artifacts.video(runDir: runDir, id: result.id) {
+                    ResultVideo(url: url)
+                        .id(url)
+                } else {
+                    ZStack {
+                        Color(red: 0.086, green: 0.094, blue: 0.11)
+                        VStack(spacing: 10) {
+                            Image(systemName: "play.circle")
+                                .font(.system(size: 38, weight: .light))
+                            Text("녹화 없음")
+                                .font(.system(size: 12))
+                        }
+                        .foregroundStyle(Color.white.opacity(0.9))
+                    }
+                }
+            }
+            .frame(width: 236, height: 420)
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+            Text("artifacts/\(result.id)/video.mp4")
+                .font(.system(size: 11, design: .monospaced))
+                .foregroundStyle(Color.qaTertiaryText)
+        }
+        .frame(width: 236)
+    }
+
+    private var expectedActual: some View {
+        HStack(alignment: .top, spacing: 10) {
+            valueBox(label: "기대", value: result.expected ?? plannedScenario?.passCondition ?? "—", color: .qaBackground)
+            valueBox(label: "실제", value: result.actual ?? result.reason ?? "—", color: actualBackground)
+        }
+    }
+
+    private var checks: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("Artemis 확인 항목")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.qaSecondaryText)
+            if let summary = Artifacts.checksSummary(runDir: runDir, id: result.id) {
+                Text("통과 \(summary.passed) · 실패 \(summary.failed)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.qaTertiaryText)
+            }
+            let values = ArtemisCheck.load(runDir: runDir, id: result.id)
+            if values.isEmpty {
+                Text("확인 항목 없음")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Color.qaTertiaryText)
+            } else {
+                ForEach(values) { check in
+                    HStack(alignment: .top, spacing: 8) {
+                        Image(systemName: check.passed ? "checkmark" : "xmark")
+                            .fontWeight(.bold)
+                            .foregroundStyle(check.passed ? Color.qaPass : Color.qaFail)
+                        Text(check.text)
+                    }
+                    .font(.system(size: 12))
+                }
+            }
+        }
+    }
+
+    private var memo: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("수정할 점 — md에 그대로 들어가요")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.qaSecondaryText)
+            TextEditor(text: memoBinding)
+                .font(.system(size: 13))
+                .frame(minHeight: 84)
+                .padding(4)
+                .scrollContentBackground(.hidden)
+                .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.qaStrongLine))
+        }
+    }
+
+    private var actions: some View {
+        HStack(spacing: 12) {
+            Toggle("수정 요청 md에 넣기", isOn: includeBinding)
+                .toggleStyle(.checkbox)
+            Spacer()
+            if canRetry {
+                Button("이 시나리오만 다시 돌리기", systemImage: "arrow.counterclockwise") {
+                    Task { await appModel.retryScenario(result.id) }
+                }
+            }
+        }
+    }
+
+    private var outcomeLabel: some View {
+        Label(outcomeText, systemImage: "circle.fill")
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(outcomeColor)
+    }
+
+    private var title: String {
+        result.title ?? plannedScenario?.title ?? "제목 없음"
+    }
+
+    private var plannedScenario: Scenario? {
+        appModel.selectedPlan?.scenarios.first(where: { $0.id == result.id })
+    }
+
+    private var outcomeText: String {
+        result.outcome?.rawValue ?? result.rawOutcome ?? "미정"
+    }
+
+    private var outcomeColor: Color {
+        switch result.outcome {
+        case .pass: .qaPass
+        case .fail: .qaFail
+        case .hold: .qaHold
+        case .notRun, nil: .qaTertiaryText
+        }
+    }
+
+    private var actualBackground: Color {
+        switch result.outcome {
+        case .pass: .qaPassWeak
+        case .fail: .qaFailWeak
+        case .hold: .qaHoldWeak
+        case .notRun, nil: .qaSunken
+        }
+    }
+
+    private var memoBinding: Binding<String> {
+        Binding(
+            get: { appModel.reviewEntry(for: result).memo },
+            set: { appModel.updateMemo(id: result.id, memo: $0) }
+        )
+    }
+
+    private var includeBinding: Binding<Bool> {
+        Binding(
+            get: { appModel.reviewEntry(for: result).include },
+            set: { appModel.updateInclude(id: result.id, include: $0) }
+        )
+    }
+
+    private var causeBinding: Binding<Cause?> {
+        Binding(
+            get: { appModel.effectiveCause(for: result) },
+            set: { appModel.updateCause(id: result.id, cause: $0) }
+        )
+    }
+
+    private var canRetry: Bool {
+        guard result.outcome == .hold, appModel.effectiveCause(for: result) == .environment else { return false }
+        return !FileManager.default.fileExists(
+            atPath: runDir.appending(path: "artifacts/\(result.id)/try1").path
+        )
+    }
+
+    private func valueBox(label: String, value: String, color: Color) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Color.qaTertiaryText)
+            Text(value).lineSpacing(3)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, minHeight: 66, alignment: .topLeading)
+        .background(color, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.qaLine))
+    }
+}
+
+private struct ResultVideo: View {
+    @State private var player: AVPlayer
+
+    init(url: URL) {
+        _player = State(initialValue: AVPlayer(url: url))
+    }
+
+    var body: some View {
+        VideoPlayer(player: player)
+    }
+}
+
+private struct ArtemisCheck: Identifiable {
+    let id: Int
+    let passed: Bool
+    let text: String
+
+    static func load(runDir: URL, id: String) -> [ArtemisCheck] {
+        let url = runDir.appending(path: "artifacts/\(id)/checks.json")
+        guard let data = try? Data(contentsOf: url),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let records = object["records"] as? [[String: Any]]
+        else { return [] }
+        return records.enumerated().compactMap { index, record in
+            guard let text = record["item_text"] as? String ?? record["subgoal_text"] as? String else {
+                return nil
+            }
+            return ArtemisCheck(id: index, passed: record["status"] as? String == "passed", text: text)
+        }
+    }
+}
