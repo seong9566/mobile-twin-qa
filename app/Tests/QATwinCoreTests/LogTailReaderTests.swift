@@ -119,3 +119,22 @@ private func append(_ text: String, to url: URL) throws {
     reader.read()
     #expect(reader.tail == "line 18\nline 19\nline 20")
 }
+
+@Test func logTailReaderRestartsWhenTruncatedLogRegrowsPastOffset() throws {
+    let url = try logTailTempFile()
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    try append("Generated summary for Step 1\nold\n", to: url)
+    var reader = LogTailReader(url: url)
+    reader.read()
+
+    let handle = try FileHandle(forWritingTo: url)
+    try handle.truncate(atOffset: 0)
+    try handle.close()
+    let regrown = "new run first line\n" + String(repeating: "LLM stopped without calling any tool\n", count: 2)
+    try append(regrown, to: url)
+    reader.read()
+
+    #expect(reader.tail == regrown)
+    #expect(reader.idleCount == nil)
+    #expect(reader.offset == UInt64(regrown.utf8.count))
+}

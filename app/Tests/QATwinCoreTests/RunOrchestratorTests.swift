@@ -731,3 +731,60 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
 
     #expect(received.filter { if case .stall = $0 { true } else { false } }.count == 1)
 }
+
+@Test func rearmStallWarnsAgainOnNewIdleLoop() async throws {
+    let plan = try fixtureDocument()
+    let scenarios = [plan.scenarios[0]]
+    let directory = try orchestratorTempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let log = StallDetector.traceLog(sessionID: "S1", artemisHome: directory, tracesDir: nil)
+    try FileManager.default.createDirectory(at: log.deletingLastPathComponent(), withIntermediateDirectories: true)
+    let idleLines = String(repeating: "LLM stopped without calling any tool\n", count: 12)
+    try ("Generated summary for Step 3\n" + idleLines).write(to: log, atomically: true, encoding: .utf8)
+    let api = FakeArtemisAPI(
+        goalIDs: goalIDs(scenarios),
+        sessionIDs: ["HOME-01": "S1"],
+        states: ["S1": [.running]]
+    )
+    let orchestrator = makeOrchestrator(
+        api: api,
+        runDir: directory,
+        plan: plan,
+        scenarios: scenarios,
+        artemisHome: directory
+    )
+    let events = Task {
+        var received: [RunEvent] = []
+        var stalls = 0
+        var pollsAfterAppend = 0
+        for await event in orchestrator.events {
+            received.append(event)
+            if case .stall(let id, _) = event {
+                stalls += 1
+                if stalls == 1 {
+                    // 기준점을 먼저 남긴 뒤에 새 반복을 붙인다.
+                    await orchestrator.rearmStall(id: id)
+                    let handle = try FileHandle(forWritingTo: log)
+                    try handle.seekToEnd()
+                    try handle.write(contentsOf: Data(idleLines.utf8))
+                    try handle.close()
+                } else {
+                    await orchestrator.stopAll()
+                }
+            }
+            if stalls == 1, case .usage = event {
+                pollsAfterAppend += 1
+                if pollsAfterAppend > 500 {
+                    await orchestrator.stopAll()
+                }
+            }
+            if event == .finished { break }
+        }
+        return received
+    }
+
+    await orchestrator.start()
+    let received = try await events.value
+
+    #expect(received.filter { if case .stall = $0 { true } else { false } }.count == 2)
+}

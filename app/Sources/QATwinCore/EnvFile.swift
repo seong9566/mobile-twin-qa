@@ -60,7 +60,7 @@ public struct EnvFile {
         let fileManager = FileManager.default
         let existed = fileManager.fileExists(atPath: url.path)
         let contents = existed ? try String(contentsOf: url, encoding: .utf8) : ""
-        let updated = Self.updating(contents, key: key, value: value)
+        let updated = Self.updating(contents, key: key, value: Self.quotedIfNeeded(value))
         let permissions = try existed
             ? Self.permissions(of: url, fileManager: fileManager)
             : 0o600
@@ -85,6 +85,19 @@ public struct EnvFile {
         } else {
             try fileManager.moveItem(at: temporaryURL, to: url)
         }
+    }
+
+    /// 읽는 쪽(entries·tools/android-login.sh)은 같은 따옴표 한 쌍을 벗긴다.
+    /// 값 자체가 같은 따옴표로 감싸여 있으면 큰따옴표 한 쌍을 더 둘러 원래 값이 그대로 읽히게 한다.
+    private static func quotedIfNeeded(_ value: String) -> String {
+        guard value.count >= 2,
+              let first = value.first,
+              first == value.last,
+              first == "\"" || first == "'"
+        else {
+            return value
+        }
+        return "\"\(value)\""
     }
 
     private static func isValidKey(_ key: String) -> Bool {

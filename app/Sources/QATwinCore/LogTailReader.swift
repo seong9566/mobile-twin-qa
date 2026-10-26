@@ -13,6 +13,8 @@ public struct LogTailReader: Sendable {
     public private(set) var offset: UInt64 = 0
 
     private var fileNumber: Int?
+    /// 파일 맨 앞 최대 64바이트. 줄었다가 예전 크기보다 다시 커진 경우도 알아채려고 매번 비교한다.
+    private var head: [UInt8] = []
     private var lines: [String] = []
     private var pending: [UInt8] = []
     private var committed = Counters()
@@ -43,7 +45,7 @@ public struct LogTailReader: Sendable {
             exists = false
             return false
         }
-        if size < offset || (fileNumber != nil && number != fileNumber) {
+        if size < offset || (fileNumber != nil && number != fileNumber) || !headMatches(handle) {
             reset()
         }
         fileNumber = number
@@ -54,6 +56,9 @@ public struct LogTailReader: Sendable {
         do {
             try handle.seek(toOffset: offset)
             let data = try handle.readToEnd() ?? Data()
+            if offset < Self.headLength {
+                head.append(contentsOf: data.prefix(Self.headLength - Int(offset)))
+            }
             offset += UInt64(data.count)
             append(data)
         } catch {
@@ -83,8 +88,21 @@ public struct LogTailReader: Sendable {
         (lines + [Self.decodeComplete(pending)]).suffix(lineLimit).joined(separator: "\n")
     }
 
+    private static let headLength = 64
+
+    private func headMatches(_ handle: FileHandle) -> Bool {
+        guard !head.isEmpty else { return true }
+        guard (try? handle.seek(toOffset: 0)) != nil,
+              let data = try? handle.read(upToCount: head.count)
+        else {
+            return false
+        }
+        return Array(data) == head
+    }
+
     private mutating func reset() {
         offset = 0
+        head = []
         lines = []
         pending = []
         committed = Counters()

@@ -70,3 +70,21 @@ private func fixtureRun(_ name: String) -> URL {
     let summary = Artifacts.checksSummary(runDir: runDir, id: "HOME-01")
     #expect(summary?.passed == 1 && summary?.failed == 0)
 }
+
+@Test func loadsResultsJsonWithOnlyScenarios() throws {
+    let directory = FileManager.default.temporaryDirectory.appending(
+        path: "QATwinCoreRunResultsTests-\(UUID().uuidString)",
+        directoryHint: .isDirectory
+    )
+    defer { try? FileManager.default.removeItem(at: directory) }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    try #"{"scenarios":[{"id":"HOME-01","outcome":"통과"}]}"#.write(
+        to: directory.appending(path: "results.json"),
+        atomically: true,
+        encoding: .utf8
+    )
+
+    let results = try RunResults.load(runDir: directory)
+    #expect(results.schemaVersion == 1 && results.plan.isEmpty)
+    #expect(results.scenarios.map(\.id) == ["HOME-01"] && results.scenarios.first?.outcome == .pass)
+}

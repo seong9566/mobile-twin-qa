@@ -55,3 +55,14 @@ private func tempFile(_ contents: String) -> URL {
     #expect(SecretRedactor.redact("비밀번호는 한글암호예요", values: ["한글암호", ""]) == "비밀번호는 ****예요")
     #expect(SecretRedactor.redact("그대로", values: []) == "그대로")
 }
+
+@Test func upsertKeepsQuotedValuesThroughRoundTrip() throws {
+    for value in ["\"abc\"", "'x'", "a\"b", "\""] {
+        let url = envTempDir().appending(path: ".env")
+        try EnvFile(url: url).upsert(key: "A", value: value)
+        #expect(EnvFile(url: url).values() == [value])
+    }
+    let url = envTempDir().appending(path: ".env")
+    try EnvFile(url: url).upsert(key: "A", value: "\"abc\"")
+    #expect(try String(contentsOf: url, encoding: .utf8) == "A=\"\"abc\"\"\n")
+}
