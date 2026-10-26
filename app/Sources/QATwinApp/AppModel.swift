@@ -104,6 +104,8 @@ final class AppModel {
     /// 가리기 전 단계 출력. 계획 경로 찾기 같은 내부 해석에만 쓰고 화면에는 stageLog(가린 것)를 보인다.
     @ObservationIgnored private var stageRawLog = ""
     @ObservationIgnored private var stageSecretValues: [String] = []
+    /// 실행 중인 프로젝트의 .env 값. Artemis 로그를 화면에 보이기 전에 가린다.
+    @ObservationIgnored private var runSecretValues: [String] = []
 
     init() {
         rateLimits = ClaudeRateLimits.read()
@@ -416,7 +418,7 @@ final class AppModel {
             artemisLog = "로그를 기다리고 있어요."
             return
         }
-        artemisLog = reader.tail
+        artemisLog = SecretRedactor.redact(reader.tail, values: runSecretValues)
     }
 
     func updateMemo(id: String, memo: String) {
@@ -482,8 +484,16 @@ final class AppModel {
     func prepareCommit() async {
         guard let workspace, let project = selectedProject, project.category == .personal else { return }
         do {
-            guard try await workspaceHead(workspace) != .detached else {
+            let head = try await workspaceHead(workspace)
+            guard head != .detached else {
                 notice = detachedHeadNotice
+                return
+            }
+            if case .branch(let branch) = head, !head.isMain {
+                notice = AppNotice(
+                    title: "커밋할 수 없어요",
+                    message: "main 브랜치가 아니라 커밋하지 않았어요 (현재: \(branch)). 메인 작업 트리에서 main으로 바꾼 뒤 다시 눌러 주세요."
+                )
                 return
             }
             reviewSaveTask?.cancel()
@@ -842,6 +852,8 @@ final class AppModel {
         starting operation: @escaping @Sendable () async -> Bool,
         runDir: URL
     ) async {
+        // 실행 중에는 .env를 잠그므로 시작할 때 한 번 읽은 값을 끝까지 쓴다.
+        runSecretValues = activeRun.map { EnvFile(url: $0.project.dir.appending(path: ".env")).values() } ?? []
         let operationTask = Task { await operation() }
         for await event in orchestrator.events {
             handle(event)

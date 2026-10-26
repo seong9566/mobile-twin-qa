@@ -48,7 +48,7 @@ func fixturePlan(_ name: String) -> URL {
 
     #expect(scenarios.map(\.accountRoleKey) == ["user", "user", nil])
     let plan = try rolePlan()
-    #expect(plan.scenarios.map(\.accountRoleKey) == ["field_worker", "admin", nil, nil])
+    #expect(plan.scenarios.map(\.accountRoleKey) == ["field_worker", "admin", nil, nil, "field_worker"])
 }
 
 @Test func requiredEnvKeysForSelectedScenarios() throws {
@@ -70,6 +70,8 @@ func fixturePlan(_ name: String) -> URL {
             == ["TEST_ADMIN_ID", "TEST_ADMIN_PASSWORD", "TEST_USER_ID", "TEST_USER_PASSWORD"]
     )
     #expect(keys(["ROLE-04"], roles).isEmpty)
+    // "로그아웃 상태"가 아닌 "로그아웃"(로그아웃 기능을 쓰는 시나리오)은 로그인이 필요하다.
+    #expect(keys(["ROLE-05"], roles) == ["TEST_USER_ID", "TEST_USER_PASSWORD"])
     #expect(!plan.usesAllAccountKeys(for: [byID["ROLE-01"]!, byID["ROLE-04"]!], roles: roles))
     // 하나라도 역할 키가 없으면 준비 절의 키 전체.
     #expect(keys(["ROLE-01", "ROLE-03"], roles) == plan.accountEnvKeys)
@@ -103,6 +105,10 @@ private func rolePlan() throws -> PlanDocument {
     #### ROLE-04 · 로그아웃
     - platform: android · 등급: A · 계정: (로그아웃 상태)
     - goal: 로그인 화면을 열어.
+
+    #### ROLE-05 · 로그아웃 버튼
+    - platform: android · 등급: A · 계정: 근무자 (`field_worker`, 로그아웃 후 다시 로그인)
+    - goal: 설정에서 로그아웃을 눌러.
     """.write(to: url, atomically: true, encoding: .utf8)
     return try PlanDocument.load(url)
 }

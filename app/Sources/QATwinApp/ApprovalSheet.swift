@@ -40,7 +40,8 @@ struct ApprovalSheet: View {
                             envURL: project.dir.appending(path: ".env"),
                             onPresentKeysChange: { presentKeys = $0 }
                         )
-                        if plan.usesAllAccountKeys(for: selectedScenarios, roles: accountRoles) {
+                        if !plan.accountEnvKeys.isEmpty,
+                           plan.usesAllAccountKeys(for: selectedScenarios, roles: accountRoles) {
                             Text("계획에 역할 키가 없는 시나리오가 있어 계정 키를 모두 확인해요")
                                 .font(.system(size: 11))
                                 .foregroundStyle(Color.qaTertiaryText)

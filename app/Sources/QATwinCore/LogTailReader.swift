@@ -89,6 +89,7 @@ public struct LogTailReader: Sendable {
     }
 
     private static let headLength = 64
+    static let pendingLimit = 64 * 1024
 
     private func headMatches(_ handle: FileHandle) -> Bool {
         guard !head.isEmpty else { return true }
@@ -110,7 +111,10 @@ public struct LogTailReader: Sendable {
 
     private mutating func append(_ data: Data) {
         pending.append(contentsOf: data)
-        guard let lastNewline = pending.lastIndex(of: 0x0A) else { return }
+        guard let lastNewline = pending.lastIndex(of: 0x0A) else {
+            trimPending()
+            return
+        }
         // 0x0A는 UTF-8 다중 바이트 글자 안에 나오지 않으므로 줄 단위로 자르면 글자가 깨지지 않는다.
         let complete = pending[..<lastNewline]
         pending = Array(pending[(lastNewline + 1)...])
@@ -125,6 +129,17 @@ public struct LogTailReader: Sendable {
         if lines.count > lineLimit * 2 {
             lines.removeFirst(lines.count - lineLimit)
         }
+        trimPending()
+    }
+
+    /// 줄바꿈 없이 길어지는 줄은 마지막 pendingLimit 바이트만 남긴다. 앞쪽 잘린 글자의 이어지는 바이트는 버린다.
+    private mutating func trimPending() {
+        guard pending.count > Self.pendingLimit else { return }
+        var start = pending.count - Self.pendingLimit
+        while start < pending.count, pending[start] & 0xC0 == 0x80 {
+            start += 1
+        }
+        pending.removeFirst(start)
     }
 
     private func withPending() -> Counters {

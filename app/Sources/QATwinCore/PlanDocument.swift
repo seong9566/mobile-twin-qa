@@ -89,7 +89,7 @@ public struct PlanDocument: Sendable {
 
     /// 선택한 시나리오에 필요한 `.env` 키. 로그인하는 시나리오가 모두 `roles`에 있는 역할 키를 가지면
     /// 그 역할들의 키만(나온 순서·중복 제거), 하나라도 없으면 준비 절의 `accountEnvKeys` 전체를 돌려준다.
-    /// `계정` 칸에 "로그아웃"이 있는 시나리오는 키가 필요 없다.
+    /// `계정` 칸에 "로그아웃 상태"가 있는 시나리오는 키가 필요 없다.
     public func requiredEnvKeys(for scenarios: [Scenario], roles: [String: AccountRole]) -> [String] {
         if usesAllAccountKeys(for: scenarios, roles: roles) {
             return accountEnvKeys
@@ -114,7 +114,7 @@ public struct PlanDocument: Sendable {
     }
 
     private static func needsLogin(_ scenario: Scenario) -> Bool {
-        !scenario.account.contains("로그아웃")
+        !scenario.account.contains("로그아웃 상태")
     }
 
     private static func parseHeader(_ lines: [String]) -> PlanHeader {

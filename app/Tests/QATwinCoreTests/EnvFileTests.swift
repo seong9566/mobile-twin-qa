@@ -54,6 +54,7 @@ private func tempFile(_ contents: String) -> URL {
     )
     #expect(SecretRedactor.redact("비밀번호는 한글암호예요", values: ["한글암호", ""]) == "비밀번호는 ****예요")
     #expect(SecretRedactor.redact("그대로", values: []) == "그대로")
+    #expect(SecretRedactor.redact("a=1 pw=abc", values: ["a", "1", "pw", "abc"]) == "a=1 pw=****")
 }
 
 @Test func upsertKeepsQuotedValuesThroughRoundTrip() throws {

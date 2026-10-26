@@ -138,3 +138,22 @@ private func append(_ text: String, to url: URL) throws {
     #expect(reader.idleCount == nil)
     #expect(reader.offset == UInt64(regrown.utf8.count))
 }
+
+@Test func logTailReaderCapsLineWithoutNewlineAtUTF8Boundary() throws {
+    let url = try logTailTempFile()
+    defer { try? FileManager.default.removeItem(at: url.deletingLastPathComponent()) }
+    var reader = LogTailReader(url: url)
+    // "가"는 3바이트라 마지막 64KB의 시작이 글자 중간에 걸린다.
+    try append(String(repeating: "가", count: 30_000), to: url)
+    reader.read()
+    try append(String(repeating: "가", count: 10), to: url)
+    reader.read()
+
+    let expected = String(repeating: "가", count: LogTailReader.pendingLimit / 3)
+    #expect(reader.tail == expected)
+    #expect(reader.tail.utf8.count <= LogTailReader.pendingLimit)
+
+    try append("\n끝\n", to: url)
+    reader.read()
+    #expect(reader.tail == expected + "\n끝\n")
+}
