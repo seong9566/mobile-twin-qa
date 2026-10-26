@@ -423,8 +423,10 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
         artemisHome: directory
     )
 
-    await orchestrator.retry(id: "HOME-01")
-    await orchestrator.retry(id: "HOME-01")
+    #expect(await orchestrator.retry(id: "HOME-01"))
+    #expect(await orchestrator.lastRetryRefusal == nil)
+    #expect(await !orchestrator.retry(id: "HOME-01"))
+    #expect(await orchestrator.lastRetryRefusal == .alreadyRetried)
 
     #expect(await api.runs() == ["HOME-01"])
     #expect(
@@ -592,8 +594,10 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
     )
     let events = Task { await collectUntilFinished(orchestrator.events) }
 
-    await orchestrator.retry(id: "UNKNOWN-99")
+    let ran = await orchestrator.retry(id: "UNKNOWN-99")
 
+    #expect(!ran)
+    #expect(await orchestrator.lastRetryRefusal == .unknownScenario)
     #expect(await events.value == [.finished])
 }
 
@@ -787,4 +791,35 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
     let received = try await events.value
 
     #expect(received.filter { if case .stall = $0 { true } else { false } }.count == 2)
+}
+
+@Test func retryWhileRunningIsRefused() async throws {
+    let plan = try fixtureDocument()
+    let scenarios = [plan.scenarios[0]]
+    let directory = try orchestratorTempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let api = FakeArtemisAPI(
+        goalIDs: goalIDs(scenarios),
+        sessionIDs: ["HOME-01": "S1"],
+        states: ["S1": [.running]]
+    )
+    let orchestrator = makeOrchestrator(
+        api: api,
+        runDir: directory,
+        plan: plan,
+        scenarios: scenarios,
+        artemisHome: directory
+    )
+    let run = Task { await orchestrator.start() }
+
+    while await api.runs().isEmpty {
+        try await Task.sleep(for: .milliseconds(1))
+    }
+    let ran = await orchestrator.retry(id: "HOME-01")
+    await orchestrator.stopAll()
+    await run.value
+
+    #expect(!ran)
+    #expect(await orchestrator.lastRetryRefusal == .running)
+    #expect(await api.runs() == ["HOME-01"])
 }

@@ -6,6 +6,8 @@ struct ApprovalSheet: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var devices: [ArtemisDevice] = []
+    @State private var busyDeviceCount = 0
+    @State private var unavailableDeviceCount = 0
     @State private var deviceSerial = ""
     @State private var server = ""
     @State private var buildInstall = true
@@ -93,17 +95,29 @@ struct ApprovalSheet: View {
 
     private var runOptions: some View {
         VStack(spacing: 0) {
-            optionRow("기기") {
-                if devices.isEmpty {
-                    Text(deviceError ?? "기기 없음 — USB 연결과 잠금 해제를 확인하세요")
-                        .foregroundStyle(Color.qaTertiaryText)
-                } else {
-                    Picker("기기", selection: $deviceSerial) {
-                        ForEach(devices, id: \.serial) { device in
-                            Text(deviceLabel(device)).tag(device.serial)
+            optionRow("기기", alignment: hasExcludedDevices ? .top : .center) {
+                VStack(alignment: .leading, spacing: 4) {
+                    if devices.isEmpty {
+                        Text(deviceError ?? "기기 없음 — USB 연결과 잠금 해제를 확인하세요")
+                            .foregroundStyle(Color.qaTertiaryText)
+                    } else {
+                        Picker("기기", selection: $deviceSerial) {
+                            ForEach(devices, id: \.serial) { device in
+                                Text(deviceLabel(device)).tag(device.serial)
+                            }
                         }
+                        .labelsHidden()
                     }
-                    .labelsHidden()
+                    if busyDeviceCount > 0 {
+                        Text("사용 중인 기기 \(busyDeviceCount)대는 뺐어요")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.qaTertiaryText)
+                    }
+                    if unavailableDeviceCount > 0 {
+                        Text("연결은 됐지만 쓸 수 없는 기기 \(unavailableDeviceCount)대 — USB 디버깅 허용을 확인하세요")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Color.qaWarn)
+                    }
                 }
             }
             Divider()
@@ -212,13 +226,22 @@ struct ApprovalSheet: View {
             return
         }
         do {
-            devices = try await ArtemisClient(base: base).devices()
+            let choices = ArtemisDevice.choices(from: try await ArtemisClient(base: base).devices())
+            devices = choices.usable
+            busyDeviceCount = choices.busyCount
+            unavailableDeviceCount = choices.unavailableCount
             deviceSerial = devices.first?.serial ?? ""
             deviceError = nil
         } catch {
             devices = []
+            busyDeviceCount = 0
+            unavailableDeviceCount = 0
             deviceError = "기기 없음 — USB 연결과 잠금 해제를 확인하세요"
         }
+    }
+
+    private var hasExcludedDevices: Bool {
+        busyDeviceCount > 0 || unavailableDeviceCount > 0
     }
 
     private func deviceLabel(_ device: ArtemisDevice) -> String {

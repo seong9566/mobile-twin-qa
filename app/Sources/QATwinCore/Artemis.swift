@@ -7,6 +7,29 @@ public struct ArtemisDevice: Decodable, Hashable, Sendable {
     public let is_busy: Bool?
 }
 
+/// 승인 창의 기기 목록. 쓸 수 있는 기기만 고르게 하고 뺀 기기 수를 따로 센다.
+public struct DeviceChoices: Equatable, Sendable {
+    public let usable: [ArtemisDevice]
+    public let busyCount: Int
+    public let unavailableCount: Int
+}
+
+extension ArtemisDevice {
+    /// adb 상태가 `device`이고 다른 세션이 쓰고 있지 않다.
+    public var isUsable: Bool {
+        state == "device" && is_busy != true
+    }
+
+    public static func choices(from devices: [ArtemisDevice]) -> DeviceChoices {
+        let connected = devices.filter { $0.state == "device" }
+        return DeviceChoices(
+            usable: connected.filter(\.isUsable),
+            busyCount: connected.count { $0.is_busy == true },
+            unavailableCount: devices.count - connected.count
+        )
+    }
+}
+
 public enum SessionState: String, Decodable, Sendable {
     case running
     case completed

@@ -47,6 +47,23 @@ public enum RunEvent: Equatable, Sendable {
     case finished
 }
 
+/// retry(id:)가 다시 돌리지 못한 이유.
+public enum RetryRefusal: Equatable, Sendable {
+    case alreadyRetried
+    case unknownScenario
+    case running
+    case moveFailed
+
+    public var reason: String {
+        switch self {
+        case .alreadyRetried: "이미 try1이 있음"
+        case .unknownScenario: "시나리오 없음"
+        case .running: "실행 중"
+        case .moveFailed: "파일 이동 실패"
+        }
+    }
+}
+
 public actor RunOrchestrator {
     private let adbPath: String?
     private let api: ArtemisAPI
@@ -67,6 +84,7 @@ public actor RunOrchestrator {
     private var currentID: String?
     private var currentSessionID: String?
     private var isRunning = false
+    public private(set) var lastRetryRefusal: RetryRefusal?
     private var sessionResults: [String: SessionState] = [:]
     private var logReaders: [String: LogTailReader] = [:]
     private var stallRearmedAt: [String: Date] = [:]
@@ -165,13 +183,22 @@ public actor RunOrchestrator {
         }
     }
 
-    public func retry(id: String) async {
-        guard !isRunning,
-              let scenario = scenarios.first(where: { $0.id == id }),
-              prepareRetryArtifacts(id: id)
-        else {
+    /// 실제로 다시 돌렸으면 true. 돌리지 못했으면 false를 돌려주고 이유를 lastRetryRefusal에 남긴다.
+    /// 어느 쪽이든 스트림 소비자를 위해 .finished는 보낸다.
+    @discardableResult
+    public func retry(id: String) async -> Bool {
+        let refusal: RetryRefusal?
+        if isRunning {
+            refusal = .running
+        } else if !scenarios.contains(where: { $0.id == id }) {
+            refusal = .unknownScenario
+        } else {
+            refusal = prepareRetryArtifacts(id: id)
+        }
+        lastRetryRefusal = refusal
+        guard refusal == nil, let scenario = scenarios.first(where: { $0.id == id }) else {
             continuation.yield(.finished)
-            return
+            return false
         }
 
         isRunning = true
@@ -185,6 +212,7 @@ public actor RunOrchestrator {
         stopAllRequested = false
         stopCurrentRequested = false
         continuation.yield(.finished)
+        return true
     }
 
     static let maxPollFailures = 3
@@ -444,13 +472,13 @@ public actor RunOrchestrator {
         }
     }
 
-    private func prepareRetryArtifacts(id: String) -> Bool {
+    private func prepareRetryArtifacts(id: String) -> RetryRefusal? {
         let directory = runDir
             .appending(path: "artifacts", directoryHint: .isDirectory)
             .appending(path: id, directoryHint: .isDirectory)
         let try1 = directory.appending(path: "try1", directoryHint: .isDirectory)
         guard !fileManager.fileExists(atPath: try1.path) else {
-            return false
+            return .alreadyRetried
         }
 
         do {
@@ -463,9 +491,9 @@ public actor RunOrchestrator {
             for item in contents {
                 try fileManager.moveItem(at: item, to: try1.appending(path: item.lastPathComponent))
             }
-            return true
+            return nil
         } catch {
-            return false
+            return .moveFailed
         }
     }
 }

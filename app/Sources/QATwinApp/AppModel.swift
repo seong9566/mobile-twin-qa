@@ -95,6 +95,7 @@ final class AppModel {
     @ObservationIgnored private var artemisLogReader: LogTailReader?
     @ObservationIgnored private var claudeRunner: ClaudeRunner?
     @ObservationIgnored private var isTerminating = false
+    @ObservationIgnored private var loadErrorShownRuns: Set<String> = []
     @ObservationIgnored private var reviewSaveTask: Task<Void, Never>?
     @ObservationIgnored private var runOrchestrator: RunOrchestrator?
     @ObservationIgnored private var runOrchestratorContext: ActiveRun?
@@ -217,7 +218,7 @@ final class AppModel {
         do {
             try loadResults(from: url)
         } catch {
-            showEmptyResults(for: url)
+            showEmptyResults(for: url, error: error)
         }
     }
 
@@ -323,10 +324,12 @@ final class AppModel {
             // 준비 중에 앱 종료를 시작했으면 실행 루프(POST /api/run)를 시작하지 않는다.
             guard succeeded, !isTerminating else {
                 activeRun = nil
+                Workspace.removeRunDirectoryIfEmpty(runDir)
                 return
             }
             guard preparationSucceeded(stageResultSummary) else {
                 activeRun = nil
+                Workspace.removeRunDirectoryIfEmpty(runDir)
                 phase = .reviewing
                 notice = AppNotice(
                     title: "준비 실패",
@@ -349,8 +352,16 @@ final class AppModel {
             runOrchestrator = orchestrator
             runOrchestratorContext = context
             phase = .running(runDir: runDir)
-            await consumeRun(orchestrator, starting: { await orchestrator.start() }, runDir: runDir)
+            await consumeRun(
+                orchestrator,
+                starting: {
+                    await orchestrator.start()
+                    return true
+                },
+                runDir: runDir
+            )
         } catch {
+            if let runDir = activeRun?.runDir { Workspace.removeRunDirectoryIfEmpty(runDir) }
             activeRun = nil
             phase = .reviewing
             show(error)
@@ -364,6 +375,8 @@ final class AppModel {
 
     func stopAll() async {
         await runOrchestrator?.stopAll()
+        // "전체 중지…" 확인 창을 연 사이에 판정 단계로 넘어갔으면 판정도 사용자 중지로 끝낸다.
+        if activeStage != nil { stageWasStopped = true }
         claudeRunner?.cancel()
     }
 
@@ -466,6 +479,10 @@ final class AppModel {
     func prepareCommit() async {
         guard let workspace, let project = selectedProject, project.category == .personal else { return }
         do {
+            guard try await workspaceHead(workspace) != .detached else {
+                notice = detachedHeadNotice
+                return
+            }
             reviewSaveTask?.cancel()
             if let selectedRun { try review.save(runDir: selectedRun) }
             let projectPath = relativePath(project.dir, from: workspace.root)
@@ -493,6 +510,11 @@ final class AppModel {
         else { return }
         isCommitConfirmationPresented = false
         do {
+            let head = try await workspaceHead(workspace)
+            guard head != .detached else {
+                notice = detachedHeadNotice
+                return
+            }
             let shell = ProcessShellRunner()
             let add = try await shell.run(
                 "/usr/bin/git",
@@ -511,6 +533,14 @@ final class AppModel {
                 timeout: .seconds(60)
             )
             guard commit.status == 0 else { throw shellError(commit.out) }
+            if case .branch(let branch) = head, !head.isMain {
+                pendingCommitFiles = []
+                notice = AppNotice(
+                    title: "커밋했어요",
+                    message: "main 브랜치가 아니라 push하지 않았어요 (현재: \(branch)). 커밋은 로컬에 남아 있어요."
+                )
+                return
+            }
             let push: (status: Int32, out: String)
             do {
                 push = try await shell.run("/usr/bin/git", ["-C", workspace.root.path, "push"], timeout: .seconds(60))
@@ -565,7 +595,8 @@ final class AppModel {
             do {
                 try loadResults(from: context.runDir)
             } catch {
-                showEmptyResults(for: context.runDir)
+                loadErrorShownRuns.remove(context.runDir.standardizedFileURL.path)
+                showEmptyResults(for: context.runDir, error: error)
             }
         } else {
             clearResults()
@@ -606,6 +637,16 @@ final class AppModel {
             }
             return (result.id, calls, state)
         }
+    }
+
+    /// 선택한 계획의 계정 키와 project.yaml accounts의 id_env·password_env를 합친 목록(계획 쪽이 앞).
+    func accountEnvKeys(for project: ProjectRef) -> [String] {
+        var keys = selectedPlan?.accountEnvKeys ?? []
+        let yaml = (try? String(contentsOf: project.dir.appending(path: "project.yaml"), encoding: .utf8)) ?? ""
+        for key in Workspace.accountEnvKeys(projectYAML: yaml) where !keys.contains(key) {
+            keys.append(key)
+        }
+        return keys
     }
 
     func environmentNames(for project: ProjectRef) -> [String] {
@@ -785,7 +826,7 @@ final class AppModel {
 
     private func consumeRun(
         _ orchestrator: RunOrchestrator,
-        starting operation: @escaping @Sendable () async -> Void,
+        starting operation: @escaping @Sendable () async -> Bool,
         runDir: URL
     ) async {
         let operationTask = Task { await operation() }
@@ -793,10 +834,22 @@ final class AppModel {
             handle(event)
             if case .finished = event { break }
         }
-        await operationTask.value
+        let didRun = await operationTask.value
         guard !isTerminating else {
             activeRun = nil
             phase = .empty
+            return
+        }
+        // 다시 돌리지 못했으면 판정(Claude 비용·summary 다시 쓰기)을 하지 않고 결과 화면으로 돌아간다.
+        guard didRun else {
+            let reason = await orchestrator.lastRetryRefusal?.reason ?? "알 수 없는 이유"
+            activeRun = nil
+            do {
+                try loadResults(from: runDir)
+            } catch {
+                showEmptyResults(for: runDir, error: error)
+            }
+            notice = AppNotice(title: "다시 돌릴 수 없어요", message: "다시 돌리지 못했어요 — \(reason)")
             return
         }
         guard let context = activeRun,
@@ -816,7 +869,8 @@ final class AppModel {
             do {
                 try loadResults(from: context.runDir)
             } catch {
-                showEmptyResults(for: context.runDir)
+                loadErrorShownRuns.remove(context.runDir.standardizedFileURL.path)
+                showEmptyResults(for: context.runDir, error: error)
             }
         } else {
             clearResults()
@@ -885,10 +939,14 @@ final class AppModel {
         phase = .results(runDir: runDir)
     }
 
-    private func showEmptyResults(for runDir: URL) {
+    /// 결과를 읽지 못해도 빈 결과 화면은 보이고, 왜 못 읽었는지는 실행 폴더마다 한 번 알린다.
+    private func showEmptyResults(for runDir: URL, error: Error) {
         clearResults()
         selectedRun = runDir
         phase = .results(runDir: runDir)
+        if loadErrorShownRuns.insert(runDir.standardizedFileURL.path).inserted {
+            notice = AppNotice(title: "결과를 읽지 못했어요", message: error.localizedDescription)
+        }
     }
 
     private func clearResults() {
@@ -898,21 +956,31 @@ final class AppModel {
         selectedResultID = nil
     }
 
+    /// 판정 다시 하기에 쓸 실행 정보. 찾지 못하면 이유를 알리고 nil.
     private func runContext(for runDir: URL) -> ActiveRun? {
-        guard let workspace,
-              let data = try? Data(contentsOf: runDir.appending(path: "run-state.json")),
+        guard let workspace else { return nil }
+        guard let data = try? Data(contentsOf: runDir.appending(path: "run-state.json")),
               let state = try? JSONDecoder().decode(RunStateFile.self, from: data)
         else {
+            notice = AppNotice(title: "판정할 수 없어요", message: "실행 폴더의 run-state.json을 읽지 못했어요.")
             return nil
         }
-        let planURL = state.plan.hasPrefix("/")
-            ? URL(fileURLWithPath: state.plan)
-            : workspace.root.appending(path: state.plan)
-        guard let plan = try? PlanDocument.load(planURL),
-              let project = projects.first(where: {
-                  planURL.standardizedFileURL.path.hasPrefix($0.dir.standardizedFileURL.path + "/")
-              })
-        else {
+        guard let project = projects.first(where: {
+            runDir.standardizedFileURL.path.hasPrefix($0.dir.standardizedFileURL.path + "/")
+        }) else {
+            notice = AppNotice(title: "판정할 수 없어요", message: "실행 폴더에 해당하는 프로젝트를 찾지 못했어요.")
+            return nil
+        }
+        // 예전 빌드는 plan에 파일 이름만, 새 빌드는 작업 공간 기준 상대 경로를 남긴다.
+        guard let planURL = workspace.resolvePlan(state.plan, projectDir: project.dir) else {
+            notice = AppNotice(title: "판정할 수 없어요", message: "계획 파일을 찾지 못해 판정할 수 없어요: \(state.plan)")
+            return nil
+        }
+        let plan: PlanDocument
+        do {
+            plan = try PlanDocument.load(planURL)
+        } catch {
+            show(error)
             return nil
         }
         return ActiveRun(
@@ -945,6 +1013,19 @@ final class AppModel {
         case .idleLoop(let count):
             return "도구 호출 없이 멈춘 응답이 \(count)회 이어졌어요."
         }
+    }
+
+    private var detachedHeadNotice: AppNotice {
+        AppNotice(title: "커밋할 수 없어요", message: "작업 공간이 브랜치가 아닌 커밋(분리된 HEAD)에 있어요. main 브랜치로 옮긴 뒤 다시 해 주세요.")
+    }
+
+    private func workspaceHead(_ workspace: Workspace) async throws -> GitHead {
+        let result = try await ProcessShellRunner().run(
+            "/usr/bin/git",
+            ["-C", workspace.root.path, "rev-parse", "--abbrev-ref", "HEAD"]
+        )
+        guard result.status == 0 else { throw shellError(result.out) }
+        return GitHead(revParseOutput: result.out)
     }
 
     private func shellError(_ output: String) -> NSError {
