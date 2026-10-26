@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>계획 쓰는 중</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#0a4aa3}a:hover{color:#0956bb}
+</style>
+</helmet>
+<div class="win" style="width:1280px;height:800px">
+  <header class="tb">
+    <div class="lights" aria-hidden="true"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+    <div class="tb-title"><b>acme_patrol · 새 테스트 계획</b><span>~/workspace/acme_patrol · dev · abc1234</span></div>
+    <nav class="path" aria-label="진행 단계">
+      <span class="done"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10"></path></svg>등록</span>
+      <span class="now" aria-current="step">계획</span>
+      <span>목록 확인</span>
+      <span>실행</span>
+      <span>결과</span>
+    </nav>
+    <button class="btn btn-danger" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>중지</button>
+  </header>
+  <div class="body">
+    <nav class="side" aria-label="프로젝트">
+      <h2>회사</h2>
+      <a class="si" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg><b style="font-weight:600">acme_patrol</b></a>
+      <div class="si-group">계획</div>
+      <span class="si sub on" aria-current="page"><span class="spin" style="border-color:#9fc1ef;border-top-color:#fff"></span>새 계획<span class="meta">쓰는 중</span></span>
+      <a class="si sub" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path></svg>2026-10-21</a>
+      <div class="si-group">실행</div>
+      <a class="si sub" href="Results.dc.html" style="flex-direction:column;align-items:stretch;height:auto;padding-top:6px;padding-bottom:7px;gap:5px">
+        <span style="display:flex;align-items:center;gap:7px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg>10-24 09:47<span class="meta">29 / 33</span></span>
+        <span class="tape-mini" aria-hidden="true"><i class="s-ok" style="flex:29"></i><i class="s-fail" style="flex:3"></i><i class="s-idle" style="flex:1"></i></span>
+      </a>
+      <h2>개인</h2>
+      <a class="si" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>departure-assistant</a>
+      <div class="side-foot">
+        <div class="meter" aria-label="Claude Code 사용률">
+          <div class="meter-row">5시간 <b>31%</b><span class="meter-bar"><i style="width:31%"></i></span></div>
+          <div class="meter-row">주간 <b>29%</b><span class="meter-bar"><i style="width:29%"></i></span></div>
+          <span style="color:#5d636c">Claude Code · 14:02 기준</span>
+        </div>
+        <span class="btn" style="justify-content:center"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"></path></svg>앱 소스 폴더 열기…</span>
+      </div>
+    </nav>
+    <main style="flex-grow:1;min-width:0;overflow:auto">
+      <div style="max-width:760px;margin:0 auto;padding:36px 32px;display:flex;flex-direction:column;gap:20px">
+        <div style="display:flex;flex-direction:column;gap:8px">
+          <h1 style="margin:0;font-size:22px;font-weight:650;letter-spacing:-0.01em">테스트 계획을 쓰고 있어요</h1>
+          <p style="margin:0;color:#545a63;line-height:1.6">Claude Code가 소스와 문서를 읽고 시나리오를 써요. 끝나면 목록 확인으로 넘어가요. 보통 5–15분 걸려요.</p>
+        </div>
+        <sc-if value="{{showDecision}}" hint-placeholder-val="{{true}}">
+          <div class="note note-warn" role="alert" style="align-items:center">
+            <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 8v5"></path><path d="M12 16h.01"></path></svg>
+            <span style="flex-grow:1;font-size:13px;color:#4d3200">기존 계획(10-21)과 소스 커밋이 달라요. 같은 범위로 새로 쓸까요?</span>
+            <button class="btn" type="button" onClick="{{dismiss}}">범위 다시 정하기…</button>
+            <button class="btn btn-primary" type="button" onClick="{{dismiss}}">같은 범위로 계속</button>
+          </div>
+        </sc-if>
+        <ol style="list-style:none;margin:0;padding:0;border:1px solid #e3e5e9;border-radius:8px;overflow:hidden" aria-label="진행 상황">
+          <sc-for list="{{tasks}}" as="t" hint-placeholder-count="5">
+            <li style="display:flex;align-items:center;gap:12px;min-height:44px;padding:0 14px;border-bottom:1px solid #eef0f2">
+              <sc-if value="{{t.done}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" role="img" aria-label="완료" style="color:#1c7a3d;stroke-width:2.2"><path d="m5 12 4 4 10-10"></path></svg></sc-if>
+              <sc-if value="{{t.now}}" hint-placeholder-val="{{false}}"><span class="spin" role="img" aria-label="진행 중" style="width:16px;height:16px"></span></sc-if>
+              <sc-if value="{{t.wait}}" hint-placeholder-val="{{false}}"><span aria-hidden="true" style="width:16px;height:16px;border-radius:50%;border:1.5px solid #cfd3d9;box-sizing:border-box"></span></sc-if>
+              <span style="{{t.labelStyle}}">{{t.label}}</span>
+              <span style="margin-left:auto;font-size:12px;color:#5d636c">{{t.meta}}</span>
+            </li>
+          </sc-for>
+        </ol>
+        <div style="border:1px solid #e3e5e9;border-radius:8px;overflow:hidden">
+          <button class="disc" type="button" onClick="{{toggleLog}}" aria-expanded="{{logOpen}}">
+            <sc-if value="{{logOpen}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px"><path d="m6 9 6 6 6-6"></path></svg></sc-if>
+            <sc-if value="{{logClosed}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px"><path d="m9 6 6 6-6 6"></path></svg></sc-if>
+            Claude Code 출력 원문
+          </button>
+          <sc-if value="{{logOpen}}" hint-placeholder-val="{{false}}">
+            <pre class="log" style="border-top:1px solid #e3e5e9">앱 실행 모드: 계획 — /qa-plan
+소스 맞추기: dev · abc1234 · 앱 버전 1.2.0+3
+knowledge.md 31항목 확인 → 갱신 28 · 삭제 1
+Read lib/features/patrol/presentation/screens/patrol_hub_screen.dart
+Read lib/features/home/widgets/work_card.dart
+Grep "순찰 시작" lib/ → 6건</pre>
+          </sc-if>
+        </div>
+      </div>
+    </main>
+  </div>
+  <footer class="status">
+    <span class="spin" aria-hidden="true" style="width:10px;height:10px;border-width:1.5px"></span><span>Claude Code 실행 중 · 06:41</span><span class="sep"></span>
+    <span>읽은 파일 48</span><span class="sep"></span>
+    <span>중지하면 쓰던 계획 파일은 남기지 않아요</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+var TASKS = [
+  { label: '소스 맞추기', meta: 'dev · abc1234', s: 'done' },
+  { label: '지식 정리', meta: '31항목 중 28 갱신 · 1 삭제', s: 'done' },
+  { label: '화면 분석', meta: '순찰 화면 문구 확인 중', s: 'now' },
+  { label: '시나리오 쓰기', meta: '', s: 'wait' },
+  { label: '계획 저장', meta: '', s: 'wait' }
+];
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { logOpen: false, decision: true }; }
+  renderVals() {
+    var self = this;
+    return {
+      tasks: TASKS.map(function (t) {
+        return { label: t.label, meta: t.meta, done: t.s === 'done', now: t.s === 'now', wait: t.s === 'wait',
+          labelStyle: t.s === 'now' ? 'font-weight:600' : (t.s === 'wait' ? 'color:#5d636c' : '') };
+      }),
+      logOpen: this.state.logOpen, logClosed: !this.state.logOpen,
+      toggleLog: function () { self.setState({ logOpen: !self.state.logOpen }); },
+      showDecision: this.state.decision,
+      dismiss: function () { self.setState({ decision: false }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

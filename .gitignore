@@ -8,14 +8,20 @@
 # 규칙 수정용 워크트리
 /.claude/worktrees/
 
+# macOS 앱 빌드 결과물
+/app/.build/
+/app/QATwin.app/
+
 # 기기별 설정·비밀값
 project.local.yaml
 !/templates/project.local.yaml
+!/app/Tests/QATwinCoreTests/Fixtures/**/project.local.yaml
 .env
 .env.*
 !.env.example
 
 # 실행 원본 결과물
 **/runs/**/artifacts/
+!/app/Tests/QATwinCoreTests/Fixtures/**/artifacts/
 
 .DS_Store

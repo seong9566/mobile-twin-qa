@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>수정 요청 md</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#0a4aa3}a:hover{color:#0956bb}
+</style>
+</helmet>
+<div class="win" style="width:1280px;height:800px;position:relative">
+  <header class="tb">
+    <div class="lights" aria-hidden="true"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+    <div class="tb-title"><b>실행 2026-10-26 14:10 · 결과</b><span>dev · abc1234 · 1.2.0+3</span></div>
+  </header>
+  <div class="scrim" aria-hidden="true"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="fx-h" style="width:900px;height:720px">
+    <div style="padding:18px 22px 12px;display:flex;align-items:flex-end;gap:12px;border-bottom:1px solid #e3e5e9">
+      <div style="display:flex;flex-direction:column;gap:3px;flex-grow:1">
+        <h1 id="fx-h" style="margin:0;font-size:16px;font-weight:650">수정 요청 md</h1>
+        <span style="font-size:12px;color:#545a63">앱 코드를 고치는 LLM에게 이 파일을 그대로 넘기면 돼요. 계정 값은 들어가지 않아요.</span>
+      </div>
+      <sc-if value="{{copied}}" hint-placeholder-val="{{false}}"><span role="status" style="display:flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#1c7a3d"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="stroke-width:2.2"><path d="m5 12 4 4 10-10"></path></svg>복사했어요</span></sc-if>
+    </div>
+    <div style="display:flex;flex-grow:1;min-height:0">
+      <div style="width:230px;flex-shrink:0;border-right:1px solid #e3e5e9;padding:12px 10px;display:flex;flex-direction:column;gap:4px;background:#fafbfc">
+        <span style="font-size:11px;font-weight:600;color:#5d636c;padding:0 6px 4px">넣을 항목</span>
+        <sc-for list="{{items}}" as="t" hint-placeholder-count="2">
+          <label style="display:flex;gap:9px;align-items:flex-start;padding:7px 6px;border-radius:6px;cursor:pointer">
+            <input type="checkbox" checked="{{t.on}}" onChange="{{t.toggle}}" style="margin-top:2px">
+            <span style="display:flex;flex-direction:column;gap:1px;min-width:0">
+              <span class="mono">{{t.id}}</span>
+              <span style="font-size:12px;color:#545a63">{{t.title}} · {{t.cause}}</span>
+            </span>
+          </label>
+        </sc-for>
+        <span style="margin-top:auto;font-size:11px;color:#5d636c;line-height:1.5;padding:0 6px">결과 화면의 체크와 같은 값이에요.</span>
+      </div>
+      <pre class="log" style="flex-grow:1;overflow:auto;background:#fff;padding:16px 20px;font-size:12px;line-height:1.7" aria-label="md 내용">{{md}}</pre>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;padding:12px 22px 16px;border-top:1px solid #e3e5e9">
+      <span class="mono" style="font-size:11px;color:#5d636c;flex-grow:1">…/runs/…/2026-10-26-1410/fix-request.md</span>
+      <a class="btn" href="Results.dc.html">닫기</a>
+      <button class="btn" type="button" onClick="{{copy}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="9" width="11" height="11" rx="2"></rect><path d="M5 15V5a2 2 0 0 1 2-2h8"></path></svg>복사</button>
+      <button class="btn btn-primary" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v11m-5-5 5 5 5-5"></path><path d="M5 20h14"></path></svg>저장…</button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+var HEAD = '# acme_patrol 수정 요청 — 2026-10-26-1410\n\n- 소스: dev · abc1234 · 앱 버전 1.2.0+3\n- 기기: Galaxy S23 · Android 14 · R5CT00DEMO1 · 서버: dev\n- 실행 기록: `company/acme_patrol/runs/2026-10-26-acme_patrol_test_plan/2026-10-26-1410/`\n';
+var ITEMS = [
+  { id: 'HOME-02', title: '비상연락 확인 시트', cause: '앱 결함', body: '\n## HOME-02 · 비상연락 확인 시트\n\n- 원인 구분: 앱 결함\n- 테스트 순서: 홈의 비상연락 카드에서 담당자 전화 버튼을 눌러 확인 시트 문구를 적어.\n- 통과 조건: "현장 관리자에게 전화할까요?" 시트 · 통화 기록 없음\n- 근거 코드: emergency_card.dart:40\n- 기대: 확인 시트가 뜨고 통화 기록 없음\n- 실제: 시트 없이 바로 전화 앱이 열림\n- 녹화·스크린샷: `…/artifacts/HOME-02/video.mp4`\n- 수정할 점: 전화 버튼이 확인 시트를 거치게 해 주세요.\n' },
+  { id: 'PAT-02', title: 'NFC 지점 인증', cause: '환경', body: '\n## PAT-02 · NFC 지점 인증\n\n- 원인 구분: 환경\n- 테스트 순서: \'지점 인증하기\'를 눌러 태그 안내가 뜨면 최대 60초 기다려. …\n- 통과 조건: 지점 완료 · 다음 지점 진행 중\n- 근거 코드: nfc_auth_sheet.dart:31\n- 기대: 지점 완료 · 다음 지점 진행 중\n- 실제: 태그 대기 중 로그가 5분 넘게 멈춰 사용자가 중지함\n- 녹화·스크린샷: `…/artifacts/PAT-02/video.mp4`\n' }
+];
+var TAIL = '\n## 요청\n\n위 항목의 원인을 소스에서 찾아 수정안을 제시해 주세요. 계정·비밀값은 이 문서에 없습니다. 필요하면 환경 변수 이름(`TEST_USER_ID`, `TEST_USER_PASSWORD`, `TEST_ADMIN_ID`, `TEST_ADMIN_PASSWORD`)으로 참조하세요.';
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { off: {}, copied: false }; }
+  renderVals() {
+    var self = this, st = this.state;
+    var on = ITEMS.filter(function (i) { return !st.off[i.id]; });
+    return {
+      items: ITEMS.map(function (i) {
+        return { id: i.id, title: i.title, cause: i.cause, on: !st.off[i.id],
+          toggle: function () { var o = Object.assign({}, st.off); o[i.id] = !o[i.id]; self.setState({ off: o, copied: false }); } };
+      }),
+      md: HEAD + (on.length ? on.map(function (i) { return i.body; }).join('') : '\n(넣을 항목이 없어요)\n') + TAIL,
+      copied: st.copied,
+      copy: function () { self.setState({ copied: true }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

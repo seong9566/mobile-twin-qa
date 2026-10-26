@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>실행 진행</title>
+<script src="./support.js"></script>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<x-dc>
+<helmet>
+<style>
+body{margin:0}
+a{color:#0a4aa3}a:hover{color:#0956bb}
+</style>
+</helmet>
+<div class="win" style="width:1280px;height:800px">
+  <header class="tb">
+    <div class="lights" aria-hidden="true"><span style="background:#ff5f57"></span><span style="background:#febc2e"></span><span style="background:#28c840"></span></div>
+    <div class="tb-title"><b>실행 2026-10-26 14:10</b><span>Galaxy S23 · R5CT00DEMO1 · dev 서버</span></div>
+    <nav class="path" aria-label="진행 단계">
+      <span class="done"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10"></path></svg>등록</span>
+      <span class="done"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10"></path></svg>계획</span>
+      <span class="done"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="m5 12 4 4 10-10"></path></svg>목록 확인</span>
+      <span class="now" aria-current="step">실행</span>
+      <span>결과</span>
+    </nav>
+    <button class="btn btn-danger" type="button"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"></rect></svg>전체 중지…</button>
+    <a class="btn btn-quiet" href="Results.dc.html" title="목업 전용 이동">결과 보기</a>
+  </header>
+  <div class="body">
+    <nav class="side" aria-label="프로젝트">
+      <h2>회사</h2>
+      <a class="si" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg><b style="font-weight:600">acme_patrol</b></a>
+      <div class="si-group">계획</div>
+      <a class="si sub" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 3h7l5 5v13H7z"></path><path d="M14 3v5h5"></path></svg>2026-10-26</a>
+      <div class="si-group">실행</div>
+      <span class="si sub on" aria-current="page" style="flex-direction:column;align-items:stretch;height:auto;padding-top:6px;padding-bottom:7px;gap:5px">
+        <span style="display:flex;align-items:center;gap:7px"><span class="spin" style="border-color:#9fc1ef;border-top-color:#fff"></span>10-26 14:10<span class="meta">3 / 5</span></span>
+        <span class="tape-mini" aria-hidden="true"><i style="flex:42;background:#cfe0f7"></i><i style="flex:31;background:#cfe0f7"></i><i style="flex:24;background:#cfe0f7"></i><i style="flex:58;background:#fff"></i><i style="flex:30;background:#7ea9e6"></i></span>
+      </span>
+      <a class="si sub" href="Results.dc.html" style="flex-direction:column;align-items:stretch;height:auto;padding-top:6px;padding-bottom:7px;gap:5px">
+        <span style="display:flex;align-items:center;gap:7px"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="8"></circle><path d="M12 8v4l3 2"></path></svg>10-24 09:47<span class="meta">29 / 33</span></span>
+        <span class="tape-mini" aria-hidden="true"><i class="s-ok" style="flex:29"></i><i class="s-fail" style="flex:3"></i><i class="s-idle" style="flex:1"></i></span>
+      </a>
+      <h2>개인</h2>
+      <a class="si" href="Main.dc.html"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path></svg>departure-assistant</a>
+      <div class="side-foot">
+        <div class="meter" aria-label="Claude Code 사용률">
+          <div class="meter-row">5시간 <b>36%</b><span class="meter-bar"><i style="width:36%"></i></span></div>
+          <div class="meter-row">주간 <b>30%</b><span class="meter-bar"><i style="width:30%"></i></span></div>
+          <span style="color:#5d636c">Claude Code · 14:20 기준</span>
+        </div>
+      </div>
+    </nav>
+    <main style="flex-grow:1;min-width:0;overflow:auto">
+      <div style="padding:20px 24px;display:flex;flex-direction:column;gap:16px">
+        <section aria-labelledby="tape-h" style="display:flex;flex-direction:column;gap:8px">
+          <div style="display:flex;align-items:baseline;gap:10px">
+            <h1 id="tape-h" style="margin:0;font-size:17px;font-weight:650">5개 중 4번째 진행 중</h1>
+            <span style="font-size:12px;color:#545a63">칸 폭 = LLM 호출 수</span>
+          </div>
+          <div class="tape" style="height:14px" role="img" aria-label="실행 테이프: 끝남 3, 진행 중 1, 대기 1">
+            <i class="s-done" style="flex:42" title="AUTH-01 · 42회"></i><i class="s-done" style="flex:31" title="HOME-01 · 31회"></i><i class="s-done" style="flex:24" title="HOME-02 · 24회"></i><i class="{{curTape}}" style="flex:58" title="PAT-02 · 58회"></i><i class="s-idle" style="flex:30" title="SET-01 · 대기"></i>
+          </div>
+          <div style="display:flex;gap:16px;font-size:11px;color:#545a63">
+            <span style="display:flex;align-items:center;gap:5px"><i aria-hidden="true" style="width:10px;height:10px;border-radius:2px;background:#7fa6d9"></i>끝남 · 판정 대기</span>
+            <span style="display:flex;align-items:center;gap:5px"><i aria-hidden="true" style="width:10px;height:10px;border-radius:2px;background:#0a64d8"></i>진행 중</span>
+            <span style="display:flex;align-items:center;gap:5px"><i aria-hidden="true" style="width:10px;height:10px;border-radius:2px;background:#c27a1a"></i>보류</span>
+            <span style="display:flex;align-items:center;gap:5px"><i aria-hidden="true" style="width:10px;height:10px;border-radius:2px;background:#d3d7dd"></i>대기</span>
+          </div>
+        </section>
+        <ol class="tbl" style="list-style:none;margin:0;padding:0" aria-label="시나리오 진행">
+          <li class="tbl-r" style="grid-template-columns:70px minmax(0,1fr) 150px 64px 64px"><span class="mono">AUTH-01</span><span>로그인 입력 검증</span><span class="st done">끝남 · 판정 대기</span><span style="font-size:12px;color:#5d636c">01:48</span><span style="font-size:12px;color:#5d636c;text-align:right">42회</span></li>
+          <li class="tbl-r" style="grid-template-columns:70px minmax(0,1fr) 150px 64px 64px"><span class="mono">HOME-01</span><span>근무 시작·종료</span><span class="st done">끝남 · 판정 대기</span><span style="font-size:12px;color:#5d636c">01:21</span><span style="font-size:12px;color:#5d636c;text-align:right">31회</span></li>
+          <li class="tbl-r" style="grid-template-columns:70px minmax(0,1fr) 150px 64px 64px"><span class="mono">HOME-02</span><span>비상연락 확인 시트</span><span class="st done">끝남 · 판정 대기</span><span style="font-size:12px;color:#5d636c">00:58</span><span style="font-size:12px;color:#5d636c;text-align:right">24회</span></li>
+          <li style="border-bottom:1px solid #eef0f2;background:#f7f9fd">
+            <div class="tbl-r" style="grid-template-columns:70px minmax(0,1fr) 150px 64px 64px;border-bottom:0;background:transparent">
+              <span class="mono" style="font-weight:600">PAT-02</span>
+              <span style="display:flex;align-items:center;gap:8px">NFC 지점 인증 <span class="tag tag-b">B · 사람이 태그</span></span>
+              <sc-if value="{{running}}" hint-placeholder-val="{{true}}"><span style="display:flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#0a4aa3"><span class="spin"></span>진행 중</span></sc-if>
+              <sc-if value="{{held}}" hint-placeholder-val="{{false}}"><span class="st hold">보류 · 사용자 중지</span></sc-if>
+              <span style="font-size:12px;color:#1b1d21;font-weight:600">05:12</span>
+              <span style="font-size:12px;color:#1b1d21;font-weight:600;text-align:right">58회</span>
+            </div>
+            <div style="padding:0 12px 12px 92px;display:flex;flex-direction:column;gap:10px">
+              <sc-if value="{{stall}}" hint-placeholder-val="{{true}}">
+                <div class="note note-fail" role="alert" style="align-items:center">
+                  <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>
+                  <span style="flex-grow:1"><b>멈춤 의심</b> — Artemis 로그가 5분 12초째 그대로예요. 태그를 기다리는 중일 수도 있어요.</span>
+                  <button class="btn" type="button" onClick="{{keepWaiting}}">계속 기다리기</button>
+                  <button class="btn btn-danger" type="button" onClick="{{holdIt}}">중지하고 보류</button>
+                </div>
+              </sc-if>
+              <div style="border:1px solid #e3e5e9;border-radius:7px;overflow:hidden;background:#fff">
+                <button class="disc" type="button" onClick="{{toggleArt}}" aria-expanded="{{artOpen}}">
+                  <sc-if value="{{artOpen}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px"><path d="m6 9 6 6 6-6"></path></svg></sc-if>
+                  <sc-if value="{{artClosed}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px"><path d="m9 6 6 6-6 6"></path></svg></sc-if>
+                  Artemis 로그 끝부분
+                </button>
+                <sc-if value="{{artOpen}}" hint-placeholder-val="{{true}}">
+                  <pre class="log" style="border-top:1px solid #e3e5e9">14:21:03  Step 6 — tap '지점 인증하기'
+14:21:09  Generated summary for Step 6
+14:21:15  Step 7 — waiting for 'NFC 태그를 기기에 가까이 대주세요'</pre>
+                </sc-if>
+              </div>
+            </div>
+          </li>
+          <li class="tbl-r" style="grid-template-columns:70px minmax(0,1fr) 150px 64px 64px;color:#5d636c"><span class="mono">SET-01</span><span>테마 바꾸기</span><span class="st idle">{{nextState}}</span><span style="font-size:12px">—</span><span></span></li>
+        </ol>
+        <div style="border:1px solid #e3e5e9;border-radius:7px;overflow:hidden">
+          <button class="disc" type="button" onClick="{{toggleCl}}" aria-expanded="{{clOpen}}">
+            <sc-if value="{{clOpen}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px"><path d="m6 9 6 6 6-6"></path></svg></sc-if>
+            <sc-if value="{{clClosed}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px"><path d="m9 6 6 6-6 6"></path></svg></sc-if>
+            준비 단계 Claude Code 출력 — 빌드·설치·로그인 완료
+          </button>
+          <sc-if value="{{clOpen}}" hint-placeholder-val="{{false}}">
+            <pre class="log" style="border-top:1px solid #e3e5e9">빌드: flutter build apk --debug … 완료
+설치: adb -s R5CT00DEMO1 install -r … Success
+로그인: tools/android-login.sh (TEST_USER_ID) … 완료
+준비 완료</pre>
+          </sc-if>
+        </div>
+      </div>
+    </main>
+  </div>
+  <footer class="status">
+    <span>Artemis 호출 155회</span><span class="sep"></span>
+    <span>입력 2.41M · 출력 0.06M 토큰</span><span class="sep"></span>
+    <span>API 지출 한도: Console 설정 사용 · 이상 없음</span><span class="sep"></span>
+    <span>끝나면 판정을 자동으로 시작해요</span>
+  </footer>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
+class Component extends DCLogic {
+  constructor(p) { super(p); this.state = { stall: true, held: false, artOpen: true, clOpen: false }; }
+  renderVals() {
+    var self = this, st = this.state;
+    return {
+      stall: st.stall && !st.held, running: !st.held, held: st.held,
+      curTape: st.held ? 's-hold' : 's-run run-now',
+      nextState: st.held ? '다음 차례' : '대기',
+      holdIt: function () { self.setState({ stall: false, held: true }); },
+      keepWaiting: function () { self.setState({ stall: false }); },
+      artOpen: st.artOpen, artClosed: !st.artOpen, toggleArt: function () { self.setState({ artOpen: !st.artOpen }); },
+      clOpen: st.clOpen, clClosed: !st.clOpen, toggleCl: function () { self.setState({ clOpen: !st.clOpen }); }
+    };
+  }
+}
+</script>
+</body>
+</html>
