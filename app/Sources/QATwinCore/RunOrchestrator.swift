@@ -292,7 +292,9 @@ public actor RunOrchestrator {
             let stallBaseline = [log.modifiedAt, stallRearmedAt[scenario.id]]
                 .compactMap { $0 }
                 .max()
-            lastLogLength[scenario.id] = log.text?.count
+            if let length = log.text?.count {
+                lastLogLength[scenario.id] = length
+            }
             // "계속 기다리기" 뒤에는 그 시점 이후 로그만 본다. 앞에 단계 요약 표지를 붙여 그 뒤의 반복만 세게 한다.
             let stallLog = log.text.map { text -> String in
                 guard let offset = stallRearmedLogLength[scenario.id], offset <= text.count else { return text }
