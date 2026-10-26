@@ -261,7 +261,10 @@ final class AppModel {
     }
 
     func startRun(_ approval: Approval) async {
-        guard let workspace, let project = selectedProject, let plan = selectedPlan else { return }
+        guard let workspace, let project = selectedProject, let plan = selectedPlan else {
+            notice = AppNotice(title: "실행할 수 없어요", message: "사이드바에서 프로젝트와 계획을 다시 골라 주세요.")
+            return
+        }
         isApprovalPresented = false
         Notifier.requestAuthorization()
         do {
@@ -506,15 +509,28 @@ final class AppModel {
         let file = project.dir.appending(path: "project.yaml")
         guard let text = try? String(contentsOf: file, encoding: .utf8) else { return [] }
         let lines = text.components(separatedBy: .newlines)
-        guard let start = lines.firstIndex(where: { $0 == "environments:" }) else { return [] }
+        guard let start = lines.firstIndex(where: { $0.hasPrefix("environments:") }) else { return [] }
+        // `dev:` 같은 하위 블록과 `default: dev` 같은 값 줄을 모두 읽는다. default가 가리키는 이름이 맨 앞.
         var names: [String] = []
+        var defaultName: String?
         for line in lines.dropFirst(start + 1) {
             if !line.isEmpty, line.first?.isWhitespace == false { break }
-            let spaces = line.prefix(while: { $0 == " " }).count
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
-            if spaces == 2, trimmed.hasSuffix(":"), !trimmed.hasPrefix("#") {
-                names.append(String(trimmed.dropLast()))
+            guard line.prefix(while: { $0 == " " }).count == 2 else { continue }
+            let content = line.split(separator: "#", maxSplits: 1, omittingEmptySubsequences: false)[0]
+                .trimmingCharacters(in: .whitespaces)
+            guard let colon = content.firstIndex(of: ":") else { continue }
+            let key = String(content[..<colon]).trimmingCharacters(in: .whitespaces)
+            let value = String(content[content.index(after: colon)...]).trimmingCharacters(in: .whitespaces)
+            guard !key.isEmpty else { continue }
+            if key == "default" {
+                if !value.isEmpty { defaultName = value }
+            } else if !names.contains(key) {
+                names.append(key)
             }
+        }
+        if let defaultName {
+            names.removeAll { $0 == defaultName }
+            names.insert(defaultName, at: 0)
         }
         return names
     }
