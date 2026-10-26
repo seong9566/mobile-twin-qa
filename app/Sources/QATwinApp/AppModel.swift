@@ -301,8 +301,11 @@ final class AppModel {
         }
         isApprovalPresented = false
         Notifier.requestAuthorization()
+        // catch에서 지울 폴더는 이번에 만든 폴더뿐이다(이전 실행의 activeRun을 보지 않는다).
+        var createdRunDir: URL?
         do {
             let runDir = try makeRunDirectory(workspace: workspace, project: project, plan: plan.url)
+            createdRunDir = runDir
             let context = ActiveRun(
                 runDir: runDir,
                 project: project,
@@ -361,7 +364,7 @@ final class AppModel {
                 runDir: runDir
             )
         } catch {
-            if let runDir = activeRun?.runDir { Workspace.removeRunDirectoryIfEmpty(runDir) }
+            if let createdRunDir { Workspace.removeRunDirectoryIfEmpty(createdRunDir) }
             activeRun = nil
             phase = .reviewing
             show(error)
@@ -543,7 +546,17 @@ final class AppModel {
             }
             let push: (status: Int32, out: String)
             do {
-                push = try await shell.run("/usr/bin/git", ["-C", workspace.root.path, "push"], timeout: .seconds(60))
+                let remoteConfig = try await shell.run(
+                    "/usr/bin/git",
+                    ["-C", workspace.root.path, "config", "branch.main.remote"]
+                )
+                let configuredRemote = remoteConfig.out.trimmingCharacters(in: .whitespacesAndNewlines)
+                let remote = remoteConfig.status == 0 && !configuredRemote.isEmpty ? configuredRemote : "origin"
+                push = try await shell.run(
+                    "/usr/bin/git",
+                    ["-C", workspace.root.path, "push", remote, "HEAD:main"],
+                    timeout: .seconds(60)
+                )
             } catch ShellRunnerError.timedOut {
                 throw shellError("git push가 60초 안에 끝나지 않아 중단했어요. 커밋은 로컬에 남아 있어요.")
             }
@@ -843,13 +856,16 @@ final class AppModel {
         // 다시 돌리지 못했으면 판정(Claude 비용·summary 다시 쓰기)을 하지 않고 결과 화면으로 돌아간다.
         guard didRun else {
             let reason = await orchestrator.lastRetryRefusal?.reason ?? "알 수 없는 이유"
+            var message = "다시 돌리지 못했어요 — \(reason)"
             activeRun = nil
             do {
                 try loadResults(from: runDir)
             } catch {
-                showEmptyResults(for: runDir, error: error)
+                // 결과를 못 읽은 이유도 같은 알림에 붙인다(따로 띄우면 하나가 덮인다).
+                showEmptyResults(for: runDir, error: error, notify: false)
+                message += "\n결과를 읽지 못했어요: \(error.localizedDescription)"
             }
-            notice = AppNotice(title: "다시 돌릴 수 없어요", message: "다시 돌리지 못했어요 — \(reason)")
+            notice = AppNotice(title: "다시 돌릴 수 없어요", message: message)
             return
         }
         guard let context = activeRun,
@@ -940,11 +956,11 @@ final class AppModel {
     }
 
     /// 결과를 읽지 못해도 빈 결과 화면은 보이고, 왜 못 읽었는지는 실행 폴더마다 한 번 알린다.
-    private func showEmptyResults(for runDir: URL, error: Error) {
+    private func showEmptyResults(for runDir: URL, error: Error, notify: Bool = true) {
         clearResults()
         selectedRun = runDir
         phase = .results(runDir: runDir)
-        if loadErrorShownRuns.insert(runDir.standardizedFileURL.path).inserted {
+        if notify, loadErrorShownRuns.insert(runDir.standardizedFileURL.path).inserted {
             notice = AppNotice(title: "결과를 읽지 못했어요", message: error.localizedDescription)
         }
     }
@@ -1020,12 +1036,13 @@ final class AppModel {
     }
 
     private func workspaceHead(_ workspace: Workspace) async throws -> GitHead {
+        // 분리된 HEAD면 symbolic-ref -q가 아무것도 찍지 않고 1로 끝난다. 그 밖의 실패는 오류로 본다.
         let result = try await ProcessShellRunner().run(
             "/usr/bin/git",
-            ["-C", workspace.root.path, "rev-parse", "--abbrev-ref", "HEAD"]
+            ["-C", workspace.root.path, "symbolic-ref", "--short", "-q", "HEAD"]
         )
-        guard result.status == 0 else { throw shellError(result.out) }
-        return GitHead(revParseOutput: result.out)
+        guard result.status == 0 || result.status == 1 else { throw shellError(result.out) }
+        return GitHead(symbolicRefStatus: result.status, output: result.out)
     }
 
     private func shellError(_ output: String) -> NSError {

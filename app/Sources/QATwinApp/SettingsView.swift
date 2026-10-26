@@ -4,6 +4,8 @@ import SwiftUI
 struct SettingsView: View {
     @Bindable var appModel: AppModel
 
+    @State private var accountKeys: [String] = []
+
     var body: some View {
         Form {
             Section {
@@ -40,28 +42,45 @@ struct SettingsView: View {
                 }
             }
 
-            Section("프로젝트 계정 (.env)") {
+            Section {
                 if let project = appModel.selectedProject {
-                    let keys = appModel.accountEnvKeys(for: project)
-                    if keys.isEmpty {
+                    if accountKeys.isEmpty {
                         Text("이 프로젝트의 계획·project.yaml에 계정 키가 없어요")
                             .foregroundStyle(Color.qaTertiaryText)
                     } else {
+                        // 실행 중에 넣은 값은 이번 단계의 가리기 목록에 들어가지 않으니 잠근다.
                         AccountsSection(
-                            keys: keys,
+                            keys: accountKeys,
                             envURL: project.dir.appending(path: ".env"),
                             onPresentKeysChange: { _ in }
                         )
+                        .disabled(isExecuting)
                     }
                 } else {
                     Text("프로젝트를 먼저 고르세요")
                         .foregroundStyle(Color.qaTertiaryText)
                 }
+            } header: {
+                Text("프로젝트 계정 (.env)")
+            } footer: {
+                if isExecuting, appModel.selectedProject != nil, !accountKeys.isEmpty {
+                    Text("실행 중에는 바꿀 수 없어요")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.qaTertiaryText)
+                }
             }
         }
         .formStyle(.grouped)
+        .task(id: accountKeysSource) {
+            accountKeys = appModel.selectedProject.map { appModel.accountEnvKeys(for: $0) } ?? []
+        }
         .padding()
         .frame(width: 620)
+    }
+
+    /// 계정 키 목록은 프로젝트나 계획이 바뀔 때만 다시 읽는다.
+    private var accountKeysSource: String {
+        [appModel.selectedProject?.id, appModel.selectedPlan?.url.path].compactMap { $0 }.joined(separator: "|")
     }
 
     private var isExecuting: Bool {

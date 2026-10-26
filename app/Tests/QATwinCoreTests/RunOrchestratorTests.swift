@@ -180,6 +180,18 @@ private func collectUntilFinished(_ stream: AsyncStream<RunEvent>) async -> [Run
     return events
 }
 
+/// 첫 POST /api/run을 기다린다. 3초 안에 오지 않으면 실패한다.
+private func waitForFirstRun(_ api: FakeArtemisAPI) async throws {
+    let deadline = ContinuousClock.now + .seconds(3)
+    while await api.runs().isEmpty {
+        guard ContinuousClock.now < deadline else {
+            Issue.record("3초 안에 Artemis 실행 요청이 오지 않았어요")
+            throw CancellationError()
+        }
+        try await Task.sleep(for: .milliseconds(1))
+    }
+}
+
 private func readRunState(_ runDir: URL) throws -> RunStateFile {
     try JSONDecoder().decode(
         RunStateFile.self,
@@ -386,9 +398,7 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
     )
     let run = Task { await orchestrator.start() }
 
-    while await api.runs().isEmpty {
-        try await Task.sleep(for: .milliseconds(1))
-    }
+    try await waitForFirstRun(api)
     await orchestrator.stopAll()
     await run.value
 
@@ -812,9 +822,7 @@ private func readRunState(_ runDir: URL) throws -> RunStateFile {
     )
     let run = Task { await orchestrator.start() }
 
-    while await api.runs().isEmpty {
-        try await Task.sleep(for: .milliseconds(1))
-    }
+    try await waitForFirstRun(api)
     let ran = await orchestrator.retry(id: "HOME-01")
     await orchestrator.stopAll()
     await run.value

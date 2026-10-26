@@ -25,12 +25,14 @@ private func helperTempDir() throws -> URL {
     #expect(choices.unavailableCount == 2)
 }
 
-@Test func gitHeadParsesBranchAndDetached() {
-    #expect(GitHead(revParseOutput: "main\n") == .branch("main"))
-    #expect(GitHead(revParseOutput: "main\n").isMain)
-    #expect(!GitHead(revParseOutput: "fix/x\n").isMain)
-    #expect(GitHead(revParseOutput: "HEAD\n") == .detached)
-    #expect(!GitHead(revParseOutput: "HEAD").isMain)
+@Test func gitHeadParsesSymbolicRef() {
+    #expect(GitHead(symbolicRefStatus: 0, output: "main\n") == .branch("main"))
+    #expect(GitHead(symbolicRefStatus: 0, output: "main\n").isMain)
+    #expect(GitHead(symbolicRefStatus: 0, output: "fix/x\n") == .branch("fix/x"))
+    #expect(!GitHead(symbolicRefStatus: 0, output: "fix/x\n").isMain)
+    #expect(GitHead(symbolicRefStatus: 1, output: "") == .detached)
+    #expect(GitHead(symbolicRefStatus: 0, output: "") == .detached)
+    #expect(!GitHead(symbolicRefStatus: 1, output: "").isMain)
 }
 
 @Test func resolvePlanAcceptsRelativePathAndLegacyFileName() throws {
@@ -54,6 +56,14 @@ private func helperTempDir() throws -> URL {
     #expect(workspace.resolvePlan(plan.path, projectDir: projectDir) != nil)
     #expect(workspace.resolvePlan("2026-09-09-missing.md", projectDir: projectDir) == nil)
     #expect(workspace.resolvePlan("personal/demo/plans/missing.md", projectDir: projectDir) == nil)
+
+    // plans/ 밖을 가리키는 값은 파일이 있어도 받지 않는다.
+    let outside = projectDir.appending(path: "project.yaml")
+    try "x".write(to: outside, atomically: true, encoding: .utf8)
+    #expect(workspace.resolvePlan("personal/demo/project.yaml", projectDir: projectDir) == nil)
+    #expect(workspace.resolvePlan("personal/demo/plans/../project.yaml", projectDir: projectDir) == nil)
+    #expect(workspace.resolvePlan(outside.path, projectDir: projectDir) == nil)
+    #expect(workspace.resolvePlan("..", projectDir: projectDir) == nil)
 }
 
 @Test func accountEnvKeysReadsFlowAndBlockStyles() {
@@ -72,6 +82,14 @@ private func helperTempDir() throws -> URL {
         Workspace.accountEnvKeys(projectYAML: yaml)
             == ["TEST_USER_ID", "TEST_USER_PASSWORD", "ADMIN_ID", "ADMIN_PASSWORD"]
     )
+    let mixed = """
+    accounts:
+    # 칸 맨 앞 주석은 블록을 끝내지 않는다
+      viewer: { id_env: viewer_id, password_env: Viewer_PW }
+      other: { my_id_env: NOT_A_KEY }
+    build: {}
+    """
+    #expect(Workspace.accountEnvKeys(projectYAML: mixed) == ["viewer_id", "Viewer_PW"])
     #expect(Workspace.accountEnvKeys(projectYAML: "accounts: {}   # 없음\n").isEmpty)
     #expect(Workspace.accountEnvKeys(projectYAML: "app_id: x\n").isEmpty)
 }
@@ -97,4 +115,36 @@ private func helperTempDir() throws -> URL {
         #expect(FileManager.default.fileExists(atPath: url.path))
     }
     #expect(!Workspace.removeRunDirectoryIfEmpty(root.appending(path: "missing")))
+}
+
+@Test func removeRunDirectoryAlsoRemovesEmptyParent() throws {
+    let root = try helperTempDir()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let planRuns = root.appending(path: "runs/2026-01-02-demo_test_plan")
+    let run = planRuns.appending(path: "2026-01-02-1000")
+    try FileManager.default.createDirectory(at: run, withIntermediateDirectories: true)
+
+    #expect(Workspace.removeRunDirectoryIfEmpty(run))
+    #expect(!FileManager.default.fileExists(atPath: planRuns.path))
+    #expect(FileManager.default.fileExists(atPath: root.appending(path: "runs").path))
+
+    let sibling = planRuns.appending(path: "2026-01-02-1100")
+    let other = planRuns.appending(path: "2026-01-02-0900")
+    try FileManager.default.createDirectory(at: sibling, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: other, withIntermediateDirectories: true)
+    #expect(Workspace.removeRunDirectoryIfEmpty(sibling))
+    #expect(FileManager.default.fileExists(atPath: other.path))
+}
+
+@Test func removeRunDirectoryKeepsSymlink() throws {
+    let root = try helperTempDir()
+    defer { try? FileManager.default.removeItem(at: root) }
+    let target = root.appending(path: "target")
+    let link = root.appending(path: "link")
+    try FileManager.default.createDirectory(at: target, withIntermediateDirectories: true)
+    try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+
+    #expect(!Workspace.removeRunDirectoryIfEmpty(link))
+    #expect((try? FileManager.default.destinationOfSymbolicLink(atPath: link.path)) != nil)
+    #expect(FileManager.default.fileExists(atPath: target.path))
 }
