@@ -1,11 +1,11 @@
 import Foundation
 
-public enum ProjectCategory: String, Codable, Hashable {
+public enum ProjectCategory: String, Codable, Hashable, Sendable {
     case company
     case personal
 }
 
-public struct ProjectRef: Hashable, Identifiable {
+public struct ProjectRef: Hashable, Identifiable, Sendable {
     public let category: ProjectCategory
     public let name: String
     public let dir: URL
@@ -16,7 +16,7 @@ public struct ProjectRef: Hashable, Identifiable {
     }
 }
 
-public struct Workspace {
+public struct Workspace: Sendable {
     public let root: URL
 
     public init(root: URL) {

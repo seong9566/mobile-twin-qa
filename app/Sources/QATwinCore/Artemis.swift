@@ -1,13 +1,13 @@
 import Foundation
 
-public struct ArtemisDevice: Decodable, Hashable {
+public struct ArtemisDevice: Decodable, Hashable, Sendable {
     public let serial: String
     public let state: String
     public let model: String?
     public let is_busy: Bool?
 }
 
-public enum SessionState: String, Decodable {
+public enum SessionState: String, Decodable, Sendable {
     case running
     case completed
     case failed
@@ -20,7 +20,7 @@ public enum SessionState: String, Decodable {
     }
 }
 
-public struct Usage: Codable, Equatable {
+public struct Usage: Codable, Equatable, Sendable {
     public let llm_calls: Int
     public let prompt_tokens: Int
     public let completion_tokens: Int
@@ -163,7 +163,7 @@ public struct ArtemisClient: ArtemisAPI {
     }
 }
 
-public enum StallSignal: Equatable {
+public enum StallSignal: Equatable, Sendable {
     case logFrozen(seconds: Int)
     case idleLoop(count: Int)
 }

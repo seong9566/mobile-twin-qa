@@ -1,12 +1,12 @@
 import Foundation
 
-public enum Grade: String, Codable {
+public enum Grade: String, Codable, Sendable {
     case A
     case B
     case C
 }
 
-public struct PlanHeader: Equatable {
+public struct PlanHeader: Equatable, Sendable {
     public var project: String
     public var category: String
     public var branch: String
@@ -15,7 +15,7 @@ public struct PlanHeader: Equatable {
     public var dirty: Bool
 }
 
-public struct Scenario: Identifiable, Hashable, Codable {
+public struct Scenario: Identifiable, Hashable, Codable, Sendable {
     public let id: String
     public var title: String
     public var platform: String
@@ -30,7 +30,7 @@ public struct Scenario: Identifiable, Hashable, Codable {
     public var dependsOn: [String]
 }
 
-public struct PlanDocument {
+public struct PlanDocument: Sendable {
     public let url: URL
     public private(set) var text: String
     public let header: PlanHeader
