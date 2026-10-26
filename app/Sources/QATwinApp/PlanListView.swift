@@ -112,7 +112,7 @@ struct PlanListView: View {
 
     private var statusBar: some View {
         HStack(spacing: 14) {
-            Text("\(appModel.includedScenarioIDs.count) / \(appModel.automaticScenarios.count)개 실행")
+            Text("\(includedCount) / \(appModel.automaticScenarios.count)개 실행")
             Divider().frame(height: 12)
             Text("사람 필요 \(appModel.automaticScenarios.count { $0.grade == .B && appModel.includedScenarioIDs.contains($0.id) })")
             Divider().frame(height: 12)

@@ -16,7 +16,7 @@ struct QATwinApp: App {
             } detail: {
                 detailView
             }
-            .frame(minWidth: 1240, minHeight: 680)
+            .frame(minWidth: 1280, minHeight: 680)
             .navigationTitle("QA Twin")
             .toolbar(removing: .title)
             .toolbar { toolbarContent }
@@ -125,11 +125,11 @@ struct QATwinApp: App {
                 ToolbarActionButton(title: "실행 준비…", systemImage: "play.fill", prominent: true) {
                     appModel.presentApproval()
                 }
-                    .disabled(
-                        appModel.includedScenarioIDs.isEmpty
-                            || appModel.activeRun != nil
-                            || appModel.activeStage != nil
-                    )
+                .disabled(
+                    appModel.includedScenarioIDs.isEmpty
+                        || appModel.activeRun != nil
+                        || appModel.activeStage != nil
+                )
             }
             if appModel.activeRun != nil, appModel.activeStage == nil {
                 Button("전체 중지…", systemImage: "stop") {
@@ -205,13 +205,15 @@ struct QATwinApp: App {
     /// 개발·화면 확인용: `-openPlan <계획 경로>` 또는 `-openRun <실행 폴더 경로>`로 연다.
     private func openFromLaunchArguments() {
         let defaults = UserDefaults.standard
+        if defaults.string(forKey: "openPlan") != nil || defaults.string(forKey: "openRun") != nil {
+            // 화면 확인용 실행이면 창을 앞으로 가져와 활성 상태로 그린다.
+            NSApp.activate()
+        }
         if let runPath = defaults.string(forKey: "openRun") {
             appModel.openRun(at: URL(fileURLWithPath: runPath).standardizedFileURL)
             return
         }
         guard let path = defaults.string(forKey: "openPlan") else { return }
-        // 화면 확인용 실행이면 창을 앞으로 가져와 활성 상태로 그린다.
-        NSApp.activate()
         let planURL = URL(fileURLWithPath: path).standardizedFileURL
         if let project = appModel.projects.first(where: { planURL.path.hasPrefix($0.dir.standardizedFileURL.path + "/") }) {
             appModel.selectProject(project)
@@ -267,7 +269,7 @@ final class QATwinApplicationDelegate: NSObject, NSApplicationDelegate {
     }
 }
 
-/// 툴바 버튼: 주 버튼은 강조색 틴트 유리, 보조 버튼은 회색 틴트 유리, 둘 다 아이콘을 붙인다.
+/// 툴바 버튼: 주 버튼은 강조색 틴트 유리, 보조 버튼은 기본 유리, 둘 다 아이콘을 붙인다.
 /// `.glassProminent`만 쓰면 이 앱에서는 강조색이 입혀지지 않아 회색으로 보여 tint를 직접 준다.
 struct ToolbarActionButton: View {
     let title: String
@@ -276,12 +278,17 @@ struct ToolbarActionButton: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
-            Label(title, systemImage: systemImage)
-                .labelStyle(.titleAndIcon)
-                .fontWeight(prominent ? .semibold : .regular)
+        let label = Label(title, systemImage: systemImage)
+            .labelStyle(.titleAndIcon)
+            .fontWeight(prominent ? .semibold : .regular)
+        if prominent {
+            Button(action: action) { label }
+                .buttonStyle(.glassProminent)
+                .tint(Color.qaAccent)
+        } else {
+            // 보조 버튼은 틴트 없는 유리 — 흰 글자 + 옅은 틴트보다 활성·비활성이 잘 구분된다.
+            Button(action: action) { label }
+                .buttonStyle(.glass)
         }
-        .buttonStyle(.glassProminent)
-        .tint(prominent ? Color.qaAccent : Color.qaSecondaryText.opacity(0.35))
     }
 }
