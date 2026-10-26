@@ -121,6 +121,7 @@ struct SidebarView: View {
             .padding(.horizontal, 8)
             .padding(.leading, 16)
             .frame(height: 26)
+            .contentShape(RoundedRectangle(cornerRadius: 6))
             .background(
                 isSelectedPlan(plan)
                     ? Color.qaAccent : .clear,
@@ -146,6 +147,9 @@ struct SidebarView: View {
             .padding(.vertical, 6)
             .padding(.horizontal, 8)
             .padding(.leading, 16)
+            // 시각만이 아니라 테이프까지 행 전체를 누를 수 있게 한다.
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .contentShape(RoundedRectangle(cornerRadius: 6))
             .background(
                 appModel.selectedRun?.resolvingSymlinksInPath().path == run.resolvingSymlinksInPath().path ? Color.qaAccentWeak : .clear,
                 in: RoundedRectangle(cornerRadius: 6)

@@ -14,6 +14,13 @@ struct PlanListView: View {
                         Text("체크를 끄면 빠져요 · 줄을 끌어 순서를 바꿔요")
                             .font(.system(size: 12))
                             .foregroundStyle(Color.qaSecondaryText)
+                        Spacer(minLength: 8)
+                        Toggle(isOn: allIncludedBinding) {
+                            Text("전체 선택 \(includedCount)/\(appModel.automaticScenarios.count)")
+                                .font(.system(size: 12))
+                        }
+                        .toggleStyle(.checkbox)
+                        .help("자동·반자동 시나리오를 모두 넣거나 모두 뺍니다")
                     }
 
                     Table(appModel.automaticScenarios, selection: $appModel.selectedScenarioID) {
@@ -86,12 +93,14 @@ struct PlanListView: View {
                 .frame(minWidth: 440, maxWidth: .infinity)
 
                 if let scenario = appModel.selectedScenario {
+                    // 선택이 바뀌면 편집 칸의 초안 상태를 새로 만든다.
                     ScenarioEditor(appModel: appModel, scenario: scenario)
-                        .frame(width: 360)
+                        .id(scenario.id)
+                        .frame(width: 540)
                         .overlay(alignment: .leading) { Divider() }
                 } else {
                     ContentUnavailableView("시나리오를 선택해 주세요", systemImage: "checklist")
-                        .frame(width: 360)
+                        .frame(width: 540)
                         .overlay(alignment: .leading) { Divider() }
                 }
             }
@@ -103,7 +112,7 @@ struct PlanListView: View {
 
     private var statusBar: some View {
         HStack(spacing: 14) {
-            Text("\(appModel.includedScenarioIDs.count) / \(appModel.automaticScenarios.count)개 실행")
+            Text("\(includedCount) / \(appModel.automaticScenarios.count)개 실행")
             Divider().frame(height: 12)
             Text("사람 필요 \(appModel.automaticScenarios.count { $0.grade == .B && appModel.includedScenarioIDs.contains($0.id) })")
             Divider().frame(height: 12)
@@ -117,6 +126,24 @@ struct PlanListView: View {
         .padding(.horizontal, 14)
         .frame(height: 28)
         .background(.bar)
+    }
+
+    private var includedCount: Int {
+        appModel.automaticScenarios.count { appModel.includedScenarioIDs.contains($0.id) }
+    }
+
+    private var allIncludedBinding: Binding<Bool> {
+        Binding(
+            get: { !appModel.automaticScenarios.isEmpty && includedCount == appModel.automaticScenarios.count },
+            set: { includeAll in
+                let ids = appModel.automaticScenarios.map(\.id)
+                if includeAll {
+                    appModel.includedScenarioIDs.formUnion(ids)
+                } else {
+                    appModel.includedScenarioIDs.subtract(ids)
+                }
+            }
+        )
     }
 
     private func includedBinding(_ id: String) -> Binding<Bool> {
