@@ -16,6 +16,7 @@
 project.local.yaml
 !/templates/project.local.yaml
 !/app/Tests/QATwinCoreTests/Fixtures/**/project.local.yaml
+.install.json
 .env
 .env.*
 !.env.example
