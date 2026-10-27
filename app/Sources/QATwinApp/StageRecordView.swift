@@ -189,7 +189,7 @@ struct StageRecordView: View {
                 Divider()
                 summaryRow("소스", "\(plan.header.branch) · \(plan.header.commit) · 앱 버전 \(plan.header.appVersion)")
                 Divider()
-                summaryRow("시나리오", "자동 \(count(.A)) · 반자동 \(count(.B)) · 수동 \(appModel.manualScenarioCount)")
+                summaryRow("시나리오", "사람 개입 없음 \(count(.A)) · 있음 \(count(.B)) · 사람이 직접 \(appModel.manualScenarioCount)")
             }
             .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.qaLine))

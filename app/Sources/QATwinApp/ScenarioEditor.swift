@@ -23,7 +23,7 @@ struct ScenarioEditor: View {
                     .font(.system(size: 16, weight: .semibold))
                     .fixedSize(horizontal: false, vertical: true)
                 VStack(alignment: .leading, spacing: 4) {
-                    detail("등급", gradeLabel)
+                    detail("사람 개입", gradeLabel)
                     detail("플랫폼", draft.platform)
                     detail("계정", draft.account.isEmpty ? "로그인 안 함" : draft.account)
                     detail("사전 조건", draft.precondition ?? "없음")
@@ -71,9 +71,9 @@ struct ScenarioEditor: View {
 
     private var gradeLabel: String {
         if draft.grade == .B {
-            return "B 반자동" + (draft.gradeNote.map { " — \($0)" } ?? "")
+            return "있음" + (draft.gradeNote.map { " — \($0)" } ?? "")
         }
-        return "\(draft.grade.rawValue) 자동"
+        return "없음 — Artemis가 끝까지 실행"
     }
 
     private func detail(_ name: String, _ value: String) -> some View {
