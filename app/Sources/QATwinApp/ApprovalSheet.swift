@@ -21,7 +21,7 @@ struct ApprovalSheet: View {
     @State private var isImportPresented = false
     @State private var screenshotApproved = false
     @State private var presentKeys: Set<String> = []
-    /// 가져오기가 끝날 때마다 올려 키 목록이 .env를 다시 읽게 한다.
+    /// 가져오기가 끝날 때마다 올려 키 목록이 .env를 다시 읽게 한다(AccountsSection.reloadToken).
     @State private var envRevision = 0
     @State private var accountRoles: [String: AccountRole] = [:]
     @State private var deviceError: String?
@@ -52,9 +52,9 @@ struct ApprovalSheet: View {
                             envURL: project.dir.appending(path: ".env"),
                             onPresentKeysChange: { presentKeys = $0 },
                             title: "테스트 env",
-                            usage: envKeyUsage
+                            usage: envKeyUsage,
+                            reloadToken: envRevision
                         )
-                        .id(envRevision)
                         HStack(spacing: 10) {
                             Button("원본 .env에서 가져오기…", systemImage: "square.and.arrow.down") {
                                 isImportPresented = true
@@ -433,10 +433,14 @@ struct ApprovalSheet: View {
         guard !deviceSerial.isEmpty else { return }
         let serial = deviceSerial
         let artemis = checks[.artemis]
-        var updated = await appModel.preflight(serial: deviceSerial, server: server, loginRole: loginRole, scenarioIDs: selectedScenarios.map(\.id))
+        var updated = await appModel.preflight(serial: serial, server: server, loginRole: loginRole, scenarioIDs: selectedScenarios.map(\.id))
+        // 점검 중에 기기를 바꿨으면 이 결과는 버린다. 새 기기의 점검이 따로 돈다.
+        guard deviceSerial == serial else { return }
         if case .done(let detail) = artemis, detail.contains("띄웠") { updated[.artemis] = artemis }
         checks = updated
-        buildLine = await buildDecisionLine(serial: serial)
+        let line = await buildDecisionLine(serial: serial)
+        guard deviceSerial == serial else { return }
+        buildLine = line
         buildLineSerial = serial
     }
 

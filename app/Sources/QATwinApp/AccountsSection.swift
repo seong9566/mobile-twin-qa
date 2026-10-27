@@ -8,6 +8,8 @@ struct AccountsSection: View {
     var title = "계정"
     /// 키마다 쓰임("로그인"·"빌드"). 비어 있으면 보이지 않는다.
     var usage: [String: String] = [:]
+    /// 바뀌면 .env를 다시 읽는다(가져오기 뒤). 입력 중인 값은 그대로 둔다.
+    var reloadToken = 0
 
     @State private var drafts: [String: String] = [:]
     @State private var editing: Set<String> = []
@@ -44,6 +46,7 @@ struct AccountsSection: View {
         }
         .onAppear { reload() }
         .onChange(of: envURL) { _, _ in reload() }
+        .onChange(of: reloadToken) { _, _ in reload() }
     }
 
     private func accountRow(_ key: String) -> some View {
