@@ -177,6 +177,46 @@ import Testing
         #expect(finishedResult(events)?.succeeded == false)
     }
 
+    @Test func prepareFailsWhenMacIPIsNeededButMissing() async throws {
+        let fixture = try makeFixture(build: "build-app", vars: #"vars: { API_BASE_URL: "http://{{mac_ip}}:5199" }"#)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let coordinator = PrepareCoordinator(
+            input: fixture.input,
+            api: FakeArtemisAPI(),
+            shell: readyShell(),
+            health: FakeHealth(responses: []),
+            launcher: FakeLauncher(scripts: [("build-app", "exit 0")]),
+            pollInterval: .milliseconds(10)
+        )
+
+        async let collected = collect(coordinator.events)
+        await coordinator.run()
+        let events = await collected
+
+        #expect(events.contains(.item(.build, .failed("맥의 IP 주소를 찾지 못했어요 — 맥의 네트워크 연결을 확인해 주세요"))))
+    }
+
+    @Test func prepareChecksDiffInSourceDir() async throws {
+        let fixture = try makeFixture(build: "build-app")
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let shell = readyShell()
+        let coordinator = PrepareCoordinator(
+            input: fixture.input,
+            api: FakeArtemisAPI(),
+            shell: shell,
+            health: FakeHealth(responses: []),
+            launcher: FakeLauncher(scripts: [("build-app", "exit 0")]),
+            pollInterval: .milliseconds(10)
+        )
+
+        async let collected = collect(coordinator.events)
+        await coordinator.run()
+        _ = await collected
+
+        let commands = shell.calls.map { ([$0.exe] + $0.args).joined(separator: " ") }
+        #expect(commands.contains { $0.contains("git -C '\(fixture.input.sourceDir.path)' diff | shasum") })
+    }
+
     @Test func prepareLogRedactsSecrets() async throws {
         let fixture = try makeFixture(login: true)
         defer { try? FileManager.default.removeItem(at: fixture.root) }
@@ -281,7 +321,8 @@ private func makeFixture(
     server: Bool = false,
     serverTimeout: Int = 1,
     build: String? = nil,
-    login: Bool = false
+    login: Bool = false,
+    vars: String = "vars: {}"
 ) throws -> PrepareFixture {
     let root = try tempDir("PrepareCoordinatorTests")
     let projectDir = root.appending(path: "personal/demo")
@@ -319,7 +360,7 @@ private func makeFixture(
     let plan = try PlanDocument.load(planURL)
     let serverBlock = server
         ? "health: http://127.0.0.1:5199/health\n    start: server-start\n    start_timeout: \(serverTimeout)"
-        : "vars: {}"
+        : vars
     let buildBlock = build.map { "\nbuild:\n  android: \($0)\n  android_apk: build/app.apk" } ?? ""
     let config = ProjectConfig.parse("""
     apps:
@@ -359,7 +400,7 @@ private func readyShell(
     RecordingShell(responses: extra + [
         ("rev-parse HEAD", 0, "source123\n"),
         ("status --porcelain", 0, ""),
-        ("git diff | shasum", 0, "same\n"),
+        ("diff | shasum", 0, "same\n"),
         ("get-state", 0, "device\n"),
     ] + windowResponses.map { ("dumpsys window", 0, $0) } + [
         ("cmd wifi status", 0, "Wifi is enabled\nWifi is connected"),

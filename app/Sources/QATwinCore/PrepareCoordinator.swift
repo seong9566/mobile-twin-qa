@@ -166,6 +166,7 @@ public actor PrepareCoordinator {
     private var activeProcess: ManagedProcess?
     private var artemisProcess: ManagedProcess?
     private var cachedMacIP: String?
+    private var sourceDirty = false
     private var cancelled = false
     private var deviceStatus: DeviceStatus?
     private var failedStep: PrepareStep?
@@ -424,7 +425,7 @@ public actor PrepareCoordinator {
             emit(.item(.server, .skipped("health 설정이 없어요")))
             return
         }
-        guard let healthURL = URL(string: Self.replacingMacIP(healthText, with: await macIP())) else {
+        guard let healthURL = URL(string: Self.replacingMacIP(healthText, with: await macIP() ?? "127.0.0.1")) else {
             throw PrepareFailure(.server, "서버 health 주소가 올바르지 않아요")
         }
         emit(.item(.server, .running))
@@ -508,12 +509,16 @@ public actor PrepareCoordinator {
             return
         }
 
-        let env = makeBuildEnv()
+        // 소스 dirty는 계획 머리말이 아니라 지금 소스의 git 상태로 본다.
+        let sourceDirty = !(try await gitOutput(["status", "--porcelain"]))
+            .trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        self.sourceDirty = sourceDirty
+        let env = try await makeBuildEnv()
         let record = InstallRecords.load(projectDir: input.projectDir)[input.serial]
         let decision = BuildSkip.decide(
             entry: record,
             headCommit: sourceCommit,
-            sourceDirty: input.plan.header.dirty,
+            sourceDirty: sourceDirty,
             envSHA256: env.sha256,
             packageInstalled: deviceStatus?.packageInstalled == true,
             forceRebuild: input.forceRebuild
@@ -584,12 +589,12 @@ public actor PrepareCoordinator {
             }
             try await grantPermissions()
             if let package = input.config.package, let commit = result.sourceCommit {
-                let env = makeBuildEnv()
+                let env = try await makeBuildEnv()
                 try InstallRecords.save(
                     InstallEntry(
                         package: package,
                         commit: commit,
-                        dirty: input.plan.header.dirty,
+                        dirty: sourceDirty,
                         envSHA256: env.sha256,
                         at: Date()
                     ),
@@ -706,7 +711,16 @@ public actor PrepareCoordinator {
         }
     }
 
-    private func makeBuildEnv() -> BuildEnv {
+    /// 빌드 env를 만든다. 서버 vars가 `{{mac_ip}}`를 쓰는데 맥 IP를 못 찾으면 실패한다(127.0.0.1을 APK에 굽지 않는다).
+    private func makeBuildEnv() async throws -> BuildEnv {
+        let server = input.config.servers[input.serverName]
+            ?? ServerConfig(name: input.serverName, health: nil, start: nil, cwd: ".", startTimeout: 60, vars: [:])
+        let address = await macIP()
+        let envText = (try? String(contentsOf: input.projectDir.appending(path: ".env"), encoding: .utf8)) ?? ""
+        let needsIP = server.vars.values.contains { $0.contains("{{mac_ip}}") } || envText.contains("{{mac_ip}}")
+        if address == nil, needsIP {
+            throw PrepareFailure(.build, "맥의 IP 주소를 찾지 못했어요 — 맥의 네트워크 연결을 확인해 주세요")
+        }
         let projectYAML = (try? String(
             contentsOf: input.projectDir.appending(path: "project.yaml"),
             encoding: .utf8
@@ -714,22 +728,21 @@ public actor PrepareCoordinator {
         return BuildEnv.make(
             envURL: input.projectDir.appending(path: ".env"),
             accountKeys: Set(Workspace.accountEnvKeys(projectYAML: projectYAML)),
-            server: input.config.servers[input.serverName]
-                ?? ServerConfig(name: input.serverName, health: nil, start: nil, cwd: ".", startTimeout: 60, vars: [:]),
-            macIP: cachedMacIP ?? "127.0.0.1"
+            server: server,
+            macIP: address ?? "127.0.0.1"
         )
     }
 
-    private func macIP() async -> String {
+    private func macIP() async -> String? {
         if let cachedMacIP { return cachedMacIP }
-        let address = await MacIP.current(shell: shell) ?? "127.0.0.1"
+        let address = await MacIP.current(shell: shell)
         cachedMacIP = address
         return address
     }
 
     private func gitSnapshot() async throws -> GitSnapshot {
         async let status = gitOutput(["status", "--porcelain"])
-        let arguments = LoginShell.arguments("git diff | shasum", exports: [])
+        let arguments = LoginShell.arguments("git -C \(shellQuote(input.sourceDir.path)) diff | shasum", exports: [])
         async let diff = shell.run(arguments.exe, arguments.args, timeout: .seconds(20))
         let statusOutput = try await status
         let diffOutput = try await diff
