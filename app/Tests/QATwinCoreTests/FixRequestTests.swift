@@ -150,3 +150,19 @@ private func runResults(_ scenarios: [ScenarioResult]) -> RunResults {
     #expect(FileManager.default.fileExists(atPath: directory.appending(path: "review.json").path))
     #expect(Review.load(runDir: directory).entries == review.entries)
 }
+
+@Test func sectionMatchesWhatRenderWrites() throws {
+    let plan = try PlanDocument.load(fixturePlan("2026-01-02-demo_app_test_plan.md"))
+    let failed = result(id: "HOME-01", outcome: .fail, cause: .appDefect, expected: "안녕하세요 표시", actual: "문구 없음")
+    let review = Review(entries: ["HOME-01": ReviewEntry(memo: "문구 키 확인", causeOverride: nil, include: true)])
+    let section = FixRequestRenderer.section(
+        result: failed, entry: review.entry(for: failed), plan: plan, runDirRelative: "personal/demo_app/runs/x/1"
+    )
+    let markdown = FixRequestRenderer.render(
+        results: runResults([failed]), plan: plan, review: review, project: "demo_app",
+        runDirRelative: "personal/demo_app/runs/x/1"
+    )
+    #expect(section.hasPrefix("## HOME-01 · "))
+    #expect(section.hasSuffix("- 수정할 점: 문구 키 확인"))
+    #expect(markdown.contains("\n" + section + "\n"))
+}

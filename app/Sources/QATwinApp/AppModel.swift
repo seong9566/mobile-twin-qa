@@ -494,6 +494,17 @@ final class AppModel {
         return runResults.scenarios.count { review.entry(for: $0).include }
     }
 
+    /// 결과 화면에서 이 시나리오가 수정 요청 md에 들어갈 모양.
+    func fixRequestSection(for result: ScenarioResult) -> String {
+        guard let selectedRun else { return "" }
+        return FixRequestRenderer.section(
+            result: result,
+            entry: review.entry(for: result),
+            plan: selectedPlan,
+            runDirRelative: workspace.map { relativePath(selectedRun, from: $0.root) } ?? selectedRun.path
+        )
+    }
+
     var fixRequestMarkdown: String {
         guard let runResults, let selectedRun, let selectedProject else { return "" }
         return FixRequestRenderer.render(
