@@ -123,20 +123,20 @@ a{color:#0a4aa3}a:hover{color:#0956bb}
             <sc-if value="{{installRunning}}" hint-placeholder-val="{{false}}">
               <span class="spin"></span>
               <span style="font-weight:600">설치·실행</span>
-              <span style="font-weight:600;color:#0a4aa3"><span class="mono">adb -s R5CT00DEMO1 install -r app-debug.apk</span> 실행 중</span>
-              <span style="font-size:12px;font-weight:600;text-align:right">0:31</span>
+              <span style="font-weight:600;color:#0a4aa3">설치 건너뜀(설치본 그대로) · <span class="mono">adb shell am start -n com.example.acme/.MainActivity</span> 실행 중</span>
+              <span style="font-size:12px;font-weight:600;text-align:right">0:03</span>
             </sc-if>
             <sc-if value="{{installWaiting}}" hint-placeholder-val="{{true}}">
               <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color:#9aa0a8"><circle cx="12" cy="12" r="8"></circle></svg>
               <span style="font-weight:600;color:#5d636c">설치·실행</span>
-              <span style="color:#5d636c">설치한 뒤 <span class="mono">am start</span>로 앱을 띄워요</span>
+              <span style="color:#5d636c">빌드했으면 설치하고, 건너뛰었으면 <span class="mono">am start</span>로 앱만 띄워요</span>
               <span></span>
             </sc-if>
           </li>
           <li class="tbl-r" style="grid-template-columns:20px 130px minmax(0,1fr) 52px">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="color:#9aa0a8"><circle cx="12" cy="12" r="8"></circle></svg>
             <span style="font-weight:600;color:#5d636c">로그인</span>
-            <span style="color:#5d636c">field_worker (<span class="mono">TEST_USER_ID</span>) → <span class="mono">android-login.sh --tap 로그인</span> · 화면이 바뀌는지 확인</span>
+            <span style="color:#5d636c">AUTH-01에 초기화가 있어 준비에서는 건너뛰고, 초기화 뒤에 field_worker (<span class="mono">TEST_USER_ID</span>)로 <span class="mono">android-login.sh --tap 로그인</span></span>
             <span></span>
           </li>
           <li class="tbl-r" style="grid-template-columns:20px 130px minmax(0,1fr) 52px">
@@ -174,7 +174,7 @@ a{color:#0a4aa3}a:hover{color:#0956bb}
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
 var LOG_LOCKED = '10:11:40  artemis   승인 시트에서 띄움 (uv run artemis ui --port 8100) · GET /api/devices → 200 (R5CT00DEMO1 device)\n10:12:03  artemis   GET /api/devices → 200 · 응답 중\n10:12:04  server    GET http://192.168.0.12:5199/health → 연결 실패 → server/run.sh 띄움\n10:12:13  server    GET /health → 200\n10:12:13  device    adb -s R5CT00DEMO1 shell dumpsys window → 잠금 화면 표시 중\n10:12:13  device    사람이 풀어야 해요 — 알림 보냄, 5초마다 다시 봐요';
-var LOG_RUNNING = LOG_LOCKED + '\n10:13:41  device    잠금 해제 · wifi: connected stec_5G · zen_mode 0\n10:13:41  build     설치본 abc1234 (.install.json) = HEAD abc1234, 변경 없음 → 건너뜀\n10:13:42  install   adb -s R5CT00DEMO1 install -r build/app/outputs/flutter-apk/app-debug.apk';
+var LOG_RUNNING = LOG_LOCKED + '\n10:13:41  device    잠금 해제 · wifi: connected stec_5G · zen_mode 0\n10:13:41  build     설치본 abc1234 (.install.json) = HEAD abc1234, env 해시 같음, 변경 없음 → 빌드·설치 건너뜀\n10:13:42  launch    adb -s R5CT00DEMO1 shell am start -n com.example.acme/.MainActivity';
 var LOG_FAILED = LOG_LOCKED + '\n10:13:41  device    잠금 해제 · wifi: connected stec_5G · zen_mode 0\n10:13:41  build     HEAD def5678 ≠ 설치본 abc1234 → flutter build apk --debug --dart-define-from-file=$QA_APP_ENV\n10:15:23  build     lib/features/home/home_screen.dart:41:7: Error: The getter \'workChip\' isn\'t defined\n10:15:23  build     Gradle task assembleDebug failed with exit code 1\n10:15:23  build     종료 코드 1 → 멈춤';
 class Component extends DCLogic {
   constructor(p) { super(p); this.state = { locked: true, failed: false, logOpen: true }; }
