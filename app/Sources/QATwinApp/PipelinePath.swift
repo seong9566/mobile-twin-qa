@@ -10,7 +10,7 @@ enum PipelineStep: String, CaseIterable {
 
 struct PipelinePath: View {
     let current: PipelineStep?
-    let isAvailable: (PipelineStep) -> Bool
+    let available: Set<PipelineStep>
     let onSelect: (PipelineStep) -> Void
 
     var body: some View {
@@ -37,8 +37,8 @@ struct PipelinePath: View {
                         )
                     }
                     .buttonStyle(.plain)
-                    .disabled(!isAvailable(step))
-                    .help(isAvailable(step) ? "\(step.rawValue) 단계 보기" : "아직 볼 \(step.rawValue) 단계가 없어요")
+                    .disabled(!available.contains(step))
+                    .help(available.contains(step) ? "\(step.rawValue) 단계 보기" : "지금 볼 수 있는 \(step.rawValue) 단계가 없어요")
 
                     if step != PipelineStep.allCases.last {
                         Image(systemName: "chevron.right")

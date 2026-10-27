@@ -133,6 +133,9 @@ struct ResultsView: View {
         }
         .padding(.horizontal, 8)
         .padding(.vertical, 7)
+        // 체크박스 밖 여백까지 행 어디를 눌러도 고르게 한다.
+        .contentShape(RoundedRectangle(cornerRadius: 6))
+        .onTapGesture { appModel.selectedResultID = result.id }
         .foregroundStyle(isSelected(result) ? Color.qaSelectedText : Color.qaText)
         .background(isSelected(result) ? Color.qaAccent : .clear, in: RoundedRectangle(cornerRadius: 6))
     }

@@ -140,6 +140,10 @@ private func rolePlan() throws -> PlanDocument {
     """.write(to: url, atomically: true, encoding: .utf8)
     let plan = try PlanDocument.load(url)
     #expect(plan.scenarios.map(\.grade) == [.A, .B])
+    // 계정 칸이 없으면 로그인하지 않으므로 계정 키를 요구하지 않는다.
+    let roles = ["field_worker": AccountRole(idEnv: "WORKER_ID", passwordEnv: "WORKER_PASSWORD")]
+    #expect(plan.requiredEnvKeys(for: plan.scenarios, roles: roles).isEmpty)
+    #expect(!plan.usesAllAccountKeys(for: plan.scenarios, roles: roles))
     #expect(plan.scenarios.map(\.gradeNote) == [nil, "사람이 시간 고르기"])
     #expect(plan.scenarios.map(\.platform) == ["android", "android"])
 }

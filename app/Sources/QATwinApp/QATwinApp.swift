@@ -45,10 +45,10 @@ struct QATwinApp: App {
                 isPresented: $appModel.isStageCancelConfirmationPresented,
                 titleVisibility: .visible
             ) {
-                Button("단계 취소", role: .destructive) { appModel.cancelStage() }
+                Button("단계 취소", role: .destructive) { appModel.cancelConfirmedStage() }
                 Button("계속 진행", role: .cancel) {}
             } message: {
-                Text("Claude Code를 멈춰요. 쓰던 결과 파일은 남기지 않아요.")
+                Text("Claude Code를 멈춰요. 쓰다 만 파일이 남았으면 확인해 주세요.")
             }
             .confirmationDialog(
                 "전체 실행을 중지할까요?",
@@ -119,7 +119,7 @@ struct QATwinApp: App {
         ToolbarItem(placement: .principal) {
             PipelinePath(
                 current: pipelineStep,
-                isAvailable: appModel.isStepAvailable,
+                available: appModel.availableSteps(),
                 onSelect: appModel.showStep
             )
             .fixedSize()
@@ -129,7 +129,7 @@ struct QATwinApp: App {
 
         ToolbarItemGroup(placement: .primaryAction) {
             if appModel.activeStage != nil {
-                Button("취소", systemImage: "xmark") { appModel.isStageCancelConfirmationPresented = true }
+                Button("취소", systemImage: "xmark") { appModel.confirmStageCancel() }
                     .buttonStyle(.glass)
                     .foregroundStyle(Color.qaFail)
             }

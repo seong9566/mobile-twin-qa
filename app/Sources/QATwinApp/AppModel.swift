@@ -71,6 +71,7 @@ final class AppModel {
     /// 단계 기록 화면에 보일 기록. 없으면 이 프로젝트에서 앱으로 돌린 적이 없음.
     var viewedStageRecord: StageRecord?
     var isStageCancelConfirmationPresented = false
+    @ObservationIgnored private var stageToCancel: Stage?
     var rateLimits: ClaudeRateLimits?
     var runEvents: [RunEvent] = []
     var runStates: [String: ScenarioRunState] = [:]
@@ -113,6 +114,8 @@ final class AppModel {
     /// 지금 도는 등록·계획 단계의 기록. 출력이 늘면 잠시 모았다가 저장한다.
     @ObservationIgnored private var liveStageRecord: StageRecord?
     @ObservationIgnored private var stageRecordSaveTask: Task<Void, Never>?
+    /// showPastRun이 진행 화면 상태를 지난 실행 값으로 바꿔 놓았으면 그 실행.
+    @ObservationIgnored private var displayedPastRun: URL?
     /// 실행 중인 프로젝트의 .env 값. Artemis 로그를 화면에 보이기 전에 가린다.
     @ObservationIgnored private var runSecretValues: [String] = []
 
@@ -432,7 +435,8 @@ final class AppModel {
     }
 
     func refreshCurrentArtemisLog() {
-        guard let sessionID = currentSessionID else {
+        // 지난 실행 기록을 볼 때는 로그를 띄우지 않는다(가릴 .env 값을 이 실행 기준으로 읽지 않았다).
+        guard activeRun != nil, let sessionID = currentSessionID else {
             artemisLog = ""
             return
         }
@@ -616,6 +620,13 @@ final class AppModel {
             notice = AppNotice(title: "다시 돌릴 수 없어요", message: "이 앱 실행 중에 만든 결과에서만 다시 돌릴 수 있어요.")
             return
         }
+        // 다른 지난 실행을 보느라 진행 상태가 바뀌었으면 이 실행의 run-state.json으로 되돌린다.
+        if let shown = displayedPastRun, shown.standardizedFileURL != context.runDir.standardizedFileURL,
+           let data = try? Data(contentsOf: context.runDir.appending(path: "run-state.json")),
+           let state = try? JSONDecoder().decode(RunStateFile.self, from: data) {
+            applyRunState(state)
+        }
+        displayedPastRun = nil
         activeRun = context
         phase = .running(runDir: context.runDir)
         await consumeRun(
@@ -656,6 +667,17 @@ final class AppModel {
         activeRun = nil
     }
 
+    /// 취소 확인 창을 연 단계. 창이 떠 있는 사이 다음 단계로 넘어갔으면 그 단계는 취소하지 않는다.
+    func confirmStageCancel() {
+        stageToCancel = activeStage
+        isStageCancelConfirmationPresented = true
+    }
+
+    func cancelConfirmedStage() {
+        guard let stageToCancel, stageToCancel == activeStage else { return }
+        cancelStage()
+    }
+
     func cancelStage() {
         stageWasStopped = true
         claudeRunner?.cancel()
@@ -674,18 +696,34 @@ final class AppModel {
         return runs(for: project, plan: plan).first
     }
 
-    func isStepAvailable(_ step: PipelineStep) -> Bool {
-        switch step {
-        case .register: activeStage == .register || selectedProject != nil
-        case .plan: activeStage == .plan || selectedProject != nil
-        case .review: selectedPlan != nil
-        case .run: activeRun != nil || activeStage == .prepare || stepRun != nil
-        case .results: stepRun.map { (try? RunResults.load(runDir: $0)) != nil } ?? false
+    /// 지금 누를 수 있는 단계. 툴바를 그릴 때 한 번만 계산한다.
+    /// 실행·단계가 도는 중에는 사이드바처럼 그 진행 화면으로만 갈 수 있다.
+    func availableSteps() -> Set<PipelineStep> {
+        if let activeStage {
+            switch activeStage {
+            case .register: return [.register]
+            case .plan: return [.plan]
+            case .prepare, .judge: return [.run]
+            }
         }
+        if activeRun != nil { return [.run] }
+        var steps: Set<PipelineStep> = []
+        if selectedProject != nil || stageRecordStore.latest(stage: .register) != nil { steps.insert(.register) }
+        if selectedProject != nil { steps.insert(.plan) }
+        if selectedPlan != nil { steps.insert(.review) }
+        if let run = stepRun {
+            steps.insert(.run)
+            let fileManager = FileManager.default
+            if fileManager.fileExists(atPath: run.appending(path: "results.json").path)
+                || fileManager.fileExists(atPath: run.appending(path: "summary.md").path) {
+                steps.insert(.results)
+            }
+        }
+        return steps
     }
 
     func showStep(_ step: PipelineStep) {
-        guard isStepAvailable(step) else { return }
+        guard availableSteps().contains(step) else { return }
         switch step {
         case .register, .plan:
             let stage: Stage = step == .register ? .register : .plan
@@ -706,7 +744,10 @@ final class AppModel {
                 showPastRun(run)
             }
         case .results:
-            if let run = stepRun { selectRun(run) }
+            guard let run = stepRun else { return }
+            // 이미 그 결과를 보고 있으면 고른 시나리오를 되돌리지 않는다.
+            if case .results(let shown) = phase, shown.standardizedFileURL == run.standardizedFileURL { return }
+            selectRun(run)
         }
     }
 
@@ -727,10 +768,14 @@ final class AppModel {
         await generatePlan()
     }
 
+    /// 지금 돌지 않는 단계의 기록(showStep은 도는 단계를 진행 화면으로 보낸다).
+    /// 프로젝트를 고르지 않았으면 가장 최근 등록 기록 — 등록이 끊겨 프로젝트가 없을 때도 다시 시작할 수 있게.
     private func stageRecord(_ stage: Stage) -> StageRecord? {
-        guard let project = selectedProject else { return nil }
+        guard let project = selectedProject else {
+            return stage == .register ? stageRecordStore.latest(stage: .register) : nil
+        }
         let key = stage == .register ? StageRecord.registerKey(projectName: project.name) : StageRecord.planKey(project: project)
-        return stageRecordStore.load(stage: stage, key: key, isLive: activeStage == stage)
+        return stageRecordStore.load(stage: stage, key: key, isLive: false)
     }
 
     /// 끝난 실행의 진행 화면을 run-state.json으로 다시 그린다. 진행 중인 실행이 있으면 건드리지 않는다.
@@ -742,13 +787,22 @@ final class AppModel {
             selectRun(run)
             return
         }
+        applyRunState(state)
+        displayedPastRun = run
+        selectedRun = run
+        phase = .running(runDir: run)
+    }
+
+    /// run-state.json 값으로 진행 화면 상태를 채운다. 진행 중으로 남은 시나리오는 앱이 끝나며 끊긴 것이다.
+    private func applyRunState(_ state: RunStateFile) {
         resetRunState(for: [])
-        runStates = state.states
+        runStates = state.states.mapValues { value in
+            if case .running = value { return .held(reason: "앱이 끝나 중단됨") }
+            return value
+        }
         runUsage = state.usage
         runDeviceSerial = state.deviceSerial
         runServer = state.server
-        selectedRun = run
-        phase = .running(runDir: run)
     }
 
     func refreshRateLimits() {
@@ -858,8 +912,6 @@ final class AppModel {
 
     private func runStage(_ stage: Stage, prompt: String, record: StageRecord? = nil) async -> Bool {
         guard let workspace else { return false }
-        liveStageRecord = record
-        saveLiveStageRecord()
         activeStage = stage
         phase = .stage(stage)
         stageLog = ""
@@ -873,6 +925,9 @@ final class AppModel {
         stageSecretValues = selectedProject.map { EnvFile(url: $0.dir.appending(path: ".env")).values() } ?? []
         stageStartedAt = .now
         stageIsRunning = true
+        // 앞 단계의 출력·비용을 비운 뒤에 첫 기록을 남긴다.
+        liveStageRecord = record
+        saveLiveStageRecord()
         var environment = ["ARTEMIS_HOME": expandedPath(artemisHome)]
         if !artemisTracesDir.isEmpty {
             environment["ARTEMIS_TRACES_DIR"] = expandedPath(artemisTracesDir)

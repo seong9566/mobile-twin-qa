@@ -113,8 +113,9 @@ public struct PlanDocument: Sendable {
         }
     }
 
+    /// 계정 칸이 없으면(로그인하지 않는 시나리오) 계정 키도 요구하지 않는다.
     private static func needsLogin(_ scenario: Scenario) -> Bool {
-        !scenario.account.contains("로그아웃 상태")
+        !scenario.account.isEmpty && !scenario.account.contains("로그아웃 상태")
     }
 
     private static func parseHeader(_ lines: [String]) -> PlanHeader {

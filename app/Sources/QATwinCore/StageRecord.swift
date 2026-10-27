@@ -76,6 +76,26 @@ public struct StageRecordStore: Sendable {
         return record
     }
 
+    /// 그 단계의 가장 최근 기록(키와 무관). 프로젝트가 아직 없는 등록 기록을 찾을 때 쓴다.
+    public func latest(stage: Stage) -> StageRecord? {
+        let prefix = url(stage: stage, key: "").lastPathComponent.replacingOccurrences(of: ".json", with: "")
+        let files = (try? FileManager.default.contentsOfDirectory(
+            at: dir, includingPropertiesForKeys: [.contentModificationDateKey]
+        )) ?? []
+        let newest = files
+            .filter { $0.lastPathComponent.hasPrefix(prefix) && $0.pathExtension == "json" }
+            .max { modified($0) < modified($1) }
+        guard let newest, let data = try? Data(contentsOf: newest),
+              var record = try? Self.decoder.decode(StageRecord.self, from: data)
+        else { return nil }
+        if record.status == .running { record.status = .interrupted }
+        return record
+    }
+
+    private func modified(_ url: URL) -> Date {
+        (try? url.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate) ?? .distantPast
+    }
+
     public func save(_ record: StageRecord) throws {
         var record = record
         if record.log.count > Self.logLimit {

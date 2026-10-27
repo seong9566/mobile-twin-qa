@@ -29,3 +29,16 @@ private func store() throws -> StageRecordStore {
     #expect(loaded.log.count == StageRecordStore.logLimit)
     #expect(loaded.log.hasSuffix("a끝"))
 }
+
+@Test func latestStageRecordIgnoresKeyAndOtherStages() throws {
+    let store = try store()
+    defer { try? FileManager.default.removeItem(at: store.dir) }
+    try store.save(StageRecord(stage: .register, key: "old", startedAt: .now, status: .succeeded))
+    Thread.sleep(forTimeInterval: 0.05)
+    try store.save(StageRecord(stage: .register, key: "new", sourcePath: "/src/new", category: .personal, startedAt: .now, status: .running))
+    Thread.sleep(forTimeInterval: 0.05)
+    try store.save(StageRecord(stage: .plan, key: "personal/new", startedAt: .now, status: .succeeded))
+    let latest = try #require(store.latest(stage: .register))
+    #expect(latest.key == "new" && latest.status == .interrupted)
+    #expect(store.latest(stage: .prepare) == nil)
+}

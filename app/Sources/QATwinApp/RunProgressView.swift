@@ -15,7 +15,8 @@ struct RunProgressView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     tapeSection
                     scenarioList
-                    prepareLog
+                    // 준비 출력은 이 앱이 지금 돌리는 실행의 것만 있다.
+                    if isLive { prepareLog }
                 }
                 .padding(.horizontal, 24)
                 .padding(.vertical, 20)
