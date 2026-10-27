@@ -52,18 +52,10 @@ struct PlanListView: View {
                         }
 
                         TableColumn("사람 개입") { scenario in
-                            Text(gradeLabel(scenario))
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(scenario.grade == .B ? Color.qaHold : Color.qaAccentInk)
-                                .padding(.horizontal, 6)
-                                .frame(height: 18)
-                                .background(
-                                    scenario.grade == .B ? Color.qaHoldWeak : Color.qaAccentWeak,
-                                    in: RoundedRectangle(cornerRadius: 4)
-                                )
-                                .help(scenario.grade == .B ? Self.gradeBHelp : Self.gradeAHelp)
+                            HumanActionChips(scenario: scenario)
+                                .help(Self.humanActionHelp)
                         }
-                        .width(120)
+                        .width(140)
 
                     } rows: {
                         ForEach(appModel.automaticScenarios) { scenario in
@@ -76,7 +68,7 @@ struct PlanListView: View {
                         }
                     }
 
-                    Text("사람 개입 — 없음: Artemis가 혼자 끝까지 실행해요 · 그 외: 표시된 동작을 사람이 해야 해요(시나리오를 시작할 때 알려요) · 전부 사람이 해야 하는 시나리오는 실행하지 않고 아래 목록에만 남겨요")
+                    Text("사람 개입 — 사람이 할 동작이 있는 시나리오만 칩으로 보여요(시나리오를 시작할 때 알려요). 비어 있으면 Artemis가 혼자 끝까지 실행해요 · 전부 사람이 해야 하는 시나리오는 실행하지 않고 아래 목록에만 남겨요")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.qaSecondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -132,8 +124,7 @@ struct PlanListView: View {
         .background(.bar)
     }
 
-    private static let gradeAHelp = "사람 개입 없음: Artemis가 사람 없이 끝까지 실행해요. 판정은 끝난 뒤 Claude가 해요"
-    private static let gradeBHelp = "실행 중 사람이 할 동작이 있어요. 시나리오를 시작할 때 알림을 보내니 기기 옆에서 지켜봐 주세요"
+    private static let humanActionHelp = "실행 중 사람이 할 동작이에요. 시나리오를 시작할 때 알림을 보내니 기기 옆에서 지켜봐 주세요"
 
     private var includedCount: Int {
         appModel.automaticScenarios.count { appModel.includedScenarioIDs.contains($0.id) }
@@ -152,11 +143,5 @@ struct PlanListView: View {
         )
     }
 
-    private func gradeLabel(_ scenario: Scenario) -> String {
-        if scenario.grade == .B {
-            return scenario.gradeNote ?? "있음"
-        }
-        return "없음"
-    }
 }
 

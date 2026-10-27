@@ -23,7 +23,10 @@ struct ScenarioEditor: View {
                     .font(.system(size: 16, weight: .semibold))
                     .fixedSize(horizontal: false, vertical: true)
                 VStack(alignment: .leading, spacing: 4) {
-                    detail("사람 개입", gradeLabel)
+                    // 사람 개입이 있는 시나리오만 그 동작을 보인다.
+                    if !HumanActionChips.actions(for: draft).isEmpty {
+                        detail("사람 개입", HumanActionChips.actions(for: draft).joined(separator: " · "))
+                    }
                     detail("플랫폼", draft.platform)
                     detail("계정", draft.account.isEmpty ? "로그인 안 함" : draft.account)
                     detail("사전 조건", draft.precondition ?? "없음")
@@ -67,13 +70,6 @@ struct ScenarioEditor: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.qaBar.opacity(0.45))
-    }
-
-    private var gradeLabel: String {
-        if draft.grade == .B {
-            return "있음" + (draft.gradeNote.map { " — \($0)" } ?? "")
-        }
-        return "없음 — Artemis가 끝까지 실행"
     }
 
     private func detail(_ name: String, _ value: String) -> some View {
