@@ -155,6 +155,8 @@ final class AppModel {
     @ObservationIgnored private var reviewSaveTask: Task<Void, Never>?
     @ObservationIgnored private var runOrchestrator: RunOrchestrator?
     @ObservationIgnored private var prepareCoordinator: PrepareCoordinator?
+    /// 실행 루프(orchestrator.start·retry)를 도는 Task. 앱을 끝낼 때 취소해 초기화 중인 셸 명령도 끊는다.
+    @ObservationIgnored private var runOperationTask: Task<Bool, Never>?
     @ObservationIgnored private var prepareContext: (input: PrepareInput, approval: Approval, plannedRunDir: URL)?
     /// 앱이 띄운 Artemis·테스트 서버를 띄우는 순간부터 기억한다. 앱이 끝날 때 함께 끝낸다.
     @ObservationIgnored private let processLauncher = TrackingProcessLauncher()
@@ -758,6 +760,8 @@ final class AppModel {
     func stopAllForTermination() async {
         isTerminating = true
         await stopAll()
+        // 실행 중 초기화(pm clear·pm grant·로그인) 명령은 stopAll로 멈추지 않으니 Task를 취소해 끊는다.
+        runOperationTask?.cancel()
         while hasActiveExecution {
             try? await Task.sleep(for: .milliseconds(100))
         }
@@ -1509,6 +1513,8 @@ final class AppModel {
             return SecretKeys.values(envURL: project.dir.appending(path: ".env"), accountKeys: accountKeys)
         } ?? []
         let operationTask = Task { await operation() }
+        runOperationTask = operationTask
+        defer { runOperationTask = nil }
         for await event in orchestrator.events {
             handle(event)
             if case .finished = event { break }

@@ -42,3 +42,15 @@ import Testing
     try await Task.sleep(for: .seconds(2.5))
     #expect(!FileManager.default.fileExists(atPath: marker.path))
 }
+
+@Test func shellRunnerCancelledBeforeStartLaunchesNothing() async throws {
+    let marker = FileManager.default.temporaryDirectory.appending(path: "shell-precancel-\(UUID().uuidString)")
+    let task = Task {
+        // 실행하기 전에 스스로 취소한다 — 프로세스를 띄우지 않고 취소로 끝나야 한다(앱 자신에게 신호도 없다).
+        withUnsafeCurrentTask { $0?.cancel() }
+        return try await ProcessShellRunner().run("/bin/sh", ["-c", "touch '\(marker.path)'"], timeout: .seconds(5))
+    }
+    await #expect(throws: CancellationError.self) { try await task.value }
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(!FileManager.default.fileExists(atPath: marker.path))
+}

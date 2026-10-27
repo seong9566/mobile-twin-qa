@@ -310,6 +310,8 @@ public actor PrepareCoordinator {
                 ? .done("꺼져 있어서 띄웠어요 · 응답해요")
                 : .done("응답해요")
         } catch {
+            // 시트가 닫혀 요청이 취소된 것이면 Artemis가 꺼진 것으로 보지 않는다.
+            if Task.isCancelled { return (items, nil) }
             if isLoopback(input.artemisURL) {
                 do {
                     // 앞서 띄운 Artemis가 아직 뜨는 중이면 다시 띄우지 않고 응답만 기다린다.
@@ -328,8 +330,13 @@ public actor PrepareCoordinator {
                         }
                         try? await Task.sleep(for: .milliseconds(200))
                     }
+                    if Task.isCancelled {
+                        // 시트를 닫아 점검이 취소됐다. 띄운 Artemis는 앱이 추적하니 그대로 두고 결과도 남기지 않는다.
+                        return (items, artemis)
+                    }
                     if case .waiting = items[.artemis] {
-                        await artemis?.terminate()
+                        // 이번 점검이 직접 띄운 것만 끈다. 앞서 띄워 아직 뜨는 중인 것은 준비 단계가 이어서 기다린다.
+                        if alreadyLaunched == nil { await artemis?.terminate() }
                         items[.artemis] = .failed("Artemis 서버가 60초 안에 응답하지 않았어요")
                     }
                 } catch {
