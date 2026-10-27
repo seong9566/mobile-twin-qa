@@ -74,14 +74,7 @@ struct RunProgressView: View {
                     .frame(width: 70, alignment: .leading)
                 HStack(spacing: 8) {
                     Text(scenario.title)
-                    if scenario.grade == .B {
-                        Text("B · \(scenario.gradeNote ?? "사람 확인")")
-                            .font(.system(size: 11, weight: .semibold))
-                            .foregroundStyle(Color.qaHold)
-                            .padding(.horizontal, 6)
-                            .frame(height: 18)
-                            .background(Color.qaHoldWeak, in: RoundedRectangle(cornerRadius: 4))
-                    }
+                    HumanActionChips(scenario: scenario)
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 stateLabel(state)

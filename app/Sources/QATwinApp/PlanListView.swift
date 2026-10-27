@@ -21,7 +21,7 @@ struct PlanListView: View {
                                 .font(.system(size: 12))
                         }
                         .toggleStyle(.checkbox)
-                        .help("자동·반자동 시나리오를 모두 넣거나 모두 뺍니다")
+                        .help("실행할 시나리오를 모두 넣거나 모두 빼요")
                     }
 
                     // 끌어 옮기기는 칸이 아니라 행(TableRow)에 둔다. 칸에 두면 첫 클릭을 끌기가 가져가 두 번 눌러야 골라진다.
@@ -51,19 +51,11 @@ struct PlanListView: View {
                             }
                         }
 
-                        TableColumn("등급") { scenario in
-                            Text(gradeLabel(scenario))
-                                .font(.system(size: 11, weight: .semibold))
-                                .foregroundStyle(scenario.grade == .B ? Color.qaHold : Color.qaAccentInk)
-                                .padding(.horizontal, 6)
-                                .frame(height: 18)
-                                .background(
-                                    scenario.grade == .B ? Color.qaHoldWeak : Color.qaAccentWeak,
-                                    in: RoundedRectangle(cornerRadius: 4)
-                                )
-                                .help(scenario.grade == .B ? Self.gradeBHelp : Self.gradeAHelp)
+                        TableColumn("사람 개입") { scenario in
+                            HumanActionChips(scenario: scenario)
+                                .help(Self.humanActionHelp)
                         }
-                        .width(120)
+                        .width(140)
 
                     } rows: {
                         ForEach(appModel.automaticScenarios) { scenario in
@@ -76,13 +68,13 @@ struct PlanListView: View {
                         }
                     }
 
-                    Text("등급 — A 자동: Artemis가 혼자 끝까지 실행해요 · B 반자동: 중간에 사람이 할 동작이 있어요(시작할 때 알려요) · C 수동: 실행하지 않고 목록만 남겨요")
+                    Text("사람 개입 — 사람이 할 동작이 있는 시나리오만 칩으로 보여요(시나리오를 시작할 때 알려요). 비어 있으면 Artemis가 혼자 끝까지 실행해요 · 전부 사람이 해야 하는 시나리오는 실행하지 않고 아래 목록에만 남겨요")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.qaSecondaryText)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if !appModel.manualScenarios.isEmpty || !appModel.manualScenarioText().isEmpty {
-                        DisclosureGroup("수동(C) \(appModel.manualScenarioCount)개는 실행하지 않아요 — 목록 보기") {
+                        DisclosureGroup("사람이 직접 할 시나리오 \(appModel.manualScenarioCount)개는 실행하지 않아요 — 목록 보기") {
                             Text(appModel.manualScenarioText())
                                 .font(.system(size: 12))
                                 .foregroundStyle(Color.qaSecondaryText)
@@ -118,7 +110,7 @@ struct PlanListView: View {
         HStack(spacing: 14) {
             Text("\(includedCount) / \(appModel.automaticScenarios.count)개 실행")
             Divider().frame(height: 12)
-            Text("사람 필요 \(appModel.automaticScenarios.count { $0.grade == .B && appModel.includedScenarioIDs.contains($0.id) })")
+            Text("사람 개입 \(appModel.automaticScenarios.count { $0.grade == .B && appModel.includedScenarioIDs.contains($0.id) })")
             Divider().frame(height: 12)
             Text("위험 경고 \(appModel.automaticScenarios.count { !SafetyLint.warnings(goal: $0.goal).isEmpty && appModel.includedScenarioIDs.contains($0.id) })")
             Divider().frame(height: 12)
@@ -132,8 +124,7 @@ struct PlanListView: View {
         .background(.bar)
     }
 
-    private static let gradeAHelp = "A 자동: Artemis가 사람 없이 끝까지 실행해요. 판정은 끝난 뒤 Claude가 해요"
-    private static let gradeBHelp = "B 반자동: 실행 중 사람이 할 동작(로그인·태그 등)이 있어요. 시나리오를 시작할 때 알림을 보내니 기기 옆에서 지켜봐 주세요"
+    private static let humanActionHelp = "실행 중 사람이 할 동작이에요. 시나리오를 시작할 때 알림을 보내니 기기 옆에서 지켜봐 주세요"
 
     private var includedCount: Int {
         appModel.automaticScenarios.count { appModel.includedScenarioIDs.contains($0.id) }
@@ -152,11 +143,5 @@ struct PlanListView: View {
         )
     }
 
-    private func gradeLabel(_ scenario: Scenario) -> String {
-        if scenario.grade == .B {
-            return "B · " + (scenario.gradeNote ?? "반자동")
-        }
-        return "A · 자동"
-    }
 }
 
