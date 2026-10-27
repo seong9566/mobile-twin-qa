@@ -180,10 +180,12 @@ struct ResultCard: View {
         }
     }
 
+    /// 이 시나리오가 수정 요청 md에 들어갈 내용(판정 결과로 채운 부분 + 직접 쓴 수정할 점)을 그대로 보인다.
     private func memo(fillsHeight: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let included = appModel.reviewEntry(for: result).include
+        return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text("수정할 점 — md에 그대로 들어가요")
+                Text(included ? "md에 들어갈 내용" : "md에 들어갈 내용 — 체크가 꺼져 있어 지금은 빠져요")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color.qaSecondaryText)
                 Spacer()
@@ -192,10 +194,27 @@ struct ResultCard: View {
                     .font(.system(size: 12))
                     .fixedSize()
             }
+            ScrollView {
+                Text(appModel.fixRequestSection(for: result))
+                    .font(.system(size: 12, design: .monospaced))
+                    .lineSpacing(3)
+                    .textSelection(.enabled)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(10)
+            }
+            // 이상적 높이를 고정해야 내용이 길어져도 ViewThatFits가 스크롤 쪽으로 바뀌지 않는다.
+            .frame(minHeight: 120, idealHeight: 120, maxHeight: fillsHeight ? .infinity : 120)
+            .background(Color.qaSunken, in: RoundedRectangle(cornerRadius: 6))
+            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.qaLine))
+            .opacity(included ? 1 : 0.5)
+
+            Text("수정할 점 직접 쓰기 — 쓰면 위 내용 끝에 '수정할 점'으로 붙어요")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.qaSecondaryText)
             TextEditor(text: memoBinding)
                 .font(.system(size: 13))
-                // 이상적 높이를 고정해야 메모가 길어져도 ViewThatFits가 스크롤 쪽으로 바뀌지 않는다.
-                .frame(minHeight: 100, idealHeight: 100, maxHeight: fillsHeight ? .infinity : 160)
+                // 남는 높이는 위 미리보기가 쓰도록 쓰기 칸은 낮게 고정한다.
+                .frame(height: 64)
                 .padding(4)
                 .scrollContentBackground(.hidden)
                 .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 6))

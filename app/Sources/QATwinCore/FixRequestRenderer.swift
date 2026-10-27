@@ -26,32 +26,9 @@ public enum FixRequestRenderer {
             guard entry.include else {
                 continue
             }
-
-            let plannedScenario = plan?.scenarios.first(where: { $0.id == result.id })
-            let title = plannedScenario?.title ?? result.title ?? ""
-            let cause = entry.causeOverride?.rawValue
-                ?? result.cause?.rawValue
-                ?? nonEmpty(result.rawCause)
-                ?? "미정"
-            includesToolMisjudgment = includesToolMisjudgment || cause == Cause.toolMisjudgment.rawValue
-
+            includesToolMisjudgment = includesToolMisjudgment || cause(result, entry) == Cause.toolMisjudgment.rawValue
             lines.append("")
-            lines.append("## \(result.id) · \(title)")
-            lines.append("")
-            lines.append("- 원인 구분: \(cause)")
-            if let plannedScenario {
-                appendValue(plannedScenario.goal, label: "테스트 순서", to: &lines)
-                appendValue(plannedScenario.passCondition, label: "통과 조건", to: &lines)
-                appendValue(plannedScenario.evidence, label: "근거 코드", to: &lines)
-            }
-            appendValue(result.expected, label: "기대", to: &lines)
-            appendValue(nonEmpty(result.actual) ?? result.reason, label: "실제", to: &lines)
-            let evidencePaths = result.evidence.filter { !$0.isEmpty }
-            if !evidencePaths.isEmpty {
-                let evidence = evidencePaths.map { "`\(runDirRelative)/\($0)`" }.joined(separator: ", ")
-                lines.append("- 녹화·스크린샷: \(evidence)")
-            }
-            appendValue(entry.memo, label: "수정할 점", to: &lines)
+            lines.append(section(result: result, entry: entry, plan: plan, runDirRelative: runDirRelative))
         }
 
         let accountEnvKeys = plan?.accountEnvKeys.joined(separator: "`, `") ?? ""
@@ -68,6 +45,43 @@ public enum FixRequestRenderer {
         }
 
         return lines.joined(separator: "\n") + "\n"
+    }
+
+    /// 시나리오 하나가 md에 들어가는 부분(`## ID · 제목`부터). 결과 화면 미리보기도 이 내용을 그대로 보인다.
+    public static func section(
+        result: ScenarioResult,
+        entry: ReviewEntry,
+        plan: PlanDocument?,
+        runDirRelative: String
+    ) -> String {
+        let plannedScenario = plan?.scenarios.first(where: { $0.id == result.id })
+        let title = plannedScenario?.title ?? result.title ?? ""
+        var lines = [
+            "## \(result.id) · \(title)",
+            "",
+            "- 원인 구분: \(cause(result, entry))",
+        ]
+        if let plannedScenario {
+            appendValue(plannedScenario.goal, label: "테스트 순서", to: &lines)
+            appendValue(plannedScenario.passCondition, label: "통과 조건", to: &lines)
+            appendValue(plannedScenario.evidence, label: "근거 코드", to: &lines)
+        }
+        appendValue(result.expected, label: "기대", to: &lines)
+        appendValue(nonEmpty(result.actual) ?? result.reason, label: "실제", to: &lines)
+        let evidencePaths = result.evidence.filter { !$0.isEmpty }
+        if !evidencePaths.isEmpty {
+            let evidence = evidencePaths.map { "`\(runDirRelative)/\($0)`" }.joined(separator: ", ")
+            lines.append("- 녹화·스크린샷: \(evidence)")
+        }
+        appendValue(entry.memo, label: "수정할 점", to: &lines)
+        return lines.joined(separator: "\n")
+    }
+
+    private static func cause(_ result: ScenarioResult, _ entry: ReviewEntry) -> String {
+        entry.causeOverride?.rawValue
+            ?? result.cause?.rawValue
+            ?? nonEmpty(result.rawCause)
+            ?? "미정"
     }
 
     private static func appendValue(_ value: String?, label: String, to lines: inout [String]) {
