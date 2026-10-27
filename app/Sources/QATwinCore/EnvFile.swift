@@ -13,40 +13,12 @@ public struct EnvFile {
     }
 
     public func presentKeys() -> Set<String> {
-        Set(entries().map(\.key))
+        Set(entriesInOrder().filter { !$0.value.isEmpty }.map(\.key))
     }
 
     /// 비어 있지 않은 값만 돌려준다. 화면에 보이기 전에 가릴 때 쓴다.
     public func values() -> [String] {
-        entries().map(\.value)
-    }
-
-    private func entries() -> [(key: String, value: String)] {
-        guard let contents = try? String(contentsOf: url, encoding: .utf8) else {
-            return []
-        }
-
-        return contents.split(separator: "\n", omittingEmptySubsequences: false).compactMap { line in
-            let line = line.last == "\r" ? line.dropLast() : line[...]
-            guard let separator = line.firstIndex(of: "=") else {
-                return nil
-            }
-
-            let key = String(line[..<separator])
-            guard Self.isValidKey(key) else {
-                return nil
-            }
-
-            var value = String(line[line.index(after: separator)...])
-            if value.count >= 2,
-               let first = value.first,
-               let last = value.last,
-               (first == "\"" && last == "\"") || (first == "'" && last == "'") {
-                value.removeFirst()
-                value.removeLast()
-            }
-            return value.isEmpty ? nil : (key, value)
-        }
+        entriesInOrder().compactMap { $0.value.isEmpty ? nil : $0.value }
     }
 
     public func upsert(key: String, value: String) throws {
@@ -129,5 +101,38 @@ public struct EnvFile {
     private static func permissions(of url: URL, fileManager: FileManager) throws -> Int {
         let attributes = try fileManager.attributesOfItem(atPath: url.path)
         return (attributes[.posixPermissions] as? NSNumber)?.intValue ?? 0o600
+    }
+}
+
+public extension EnvFile {
+    func entriesInOrder() -> [(key: String, value: String)] {
+        guard let contents = try? String(contentsOf: url, encoding: .utf8) else {
+            return []
+        }
+
+        var entries: [(key: String, value: String)] = []
+        var seen: Set<String> = []
+        for rawLine in contents.split(separator: "\n", omittingEmptySubsequences: false) {
+            let line = rawLine.last == "\r" ? rawLine.dropLast() : rawLine[...]
+            guard let separator = line.firstIndex(of: "=") else {
+                continue
+            }
+
+            let key = String(line[..<separator])
+            guard Self.isValidKey(key), seen.insert(key).inserted else {
+                continue
+            }
+
+            var value = String(line[line.index(after: separator)...])
+            if value.count >= 2,
+               let first = value.first,
+               let last = value.last,
+               (first == "\"" && last == "\"") || (first == "'" && last == "'") {
+                value.removeFirst()
+                value.removeLast()
+            }
+            entries.append((key, value))
+        }
+        return entries
     }
 }

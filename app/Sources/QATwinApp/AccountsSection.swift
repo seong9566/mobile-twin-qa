@@ -5,6 +5,11 @@ struct AccountsSection: View {
     let keys: [String]
     let envURL: URL
     let onPresentKeysChange: (Set<String>) -> Void
+    var title = "계정"
+    /// 키마다 쓰임("로그인"·"빌드"). 비어 있으면 보이지 않는다.
+    var usage: [String: String] = [:]
+    /// 바뀌면 .env를 다시 읽는다(가져오기 뒤). 입력 중인 값은 그대로 둔다.
+    var reloadToken = 0
 
     @State private var drafts: [String: String] = [:]
     @State private var editing: Set<String> = []
@@ -14,7 +19,7 @@ struct AccountsSection: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(alignment: .firstTextBaseline) {
-                Text("계정")
+                Text(title)
                     .font(.system(size: 12, weight: .semibold))
                 Text(relativeEnvPath)
                     .font(.system(.caption2, design: .monospaced))
@@ -41,6 +46,7 @@ struct AccountsSection: View {
         }
         .onAppear { reload() }
         .onChange(of: envURL) { _, _ in reload() }
+        .onChange(of: reloadToken) { _, _ in reload() }
     }
 
     private func accountRow(_ key: String) -> some View {
@@ -52,6 +58,12 @@ struct AccountsSection: View {
             Text(key)
                 .font(.system(.caption, design: .monospaced))
                 .frame(width: 180, alignment: .leading)
+            if let use = usage[key] {
+                Text(use)
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.qaTertiaryText)
+                    .frame(width: 40, alignment: .leading)
+            }
 
             if presentKeys.contains(key), !editing.contains(key) {
                 Text("저장됨")

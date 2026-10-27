@@ -35,6 +35,7 @@ mobile-twin-qa/
 <company|personal>/<project>/
   project.yaml          repo URL·브랜치·앱 ID·빌드 명령·환경 (공유)
   project.local.yaml    이 기기의 소스 경로·기기 (git 제외)
+  .install.json         이 기기에 설치한 빌드 기록 (git 제외)
   .env                  계정·비밀값 (git 제외)
   knowledge.md          누적 지식
   knowledge/<주제>.md   knowledge.md가 200줄을 넘을 때 옮긴 상세

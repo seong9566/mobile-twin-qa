@@ -24,6 +24,7 @@ public struct Scenario: Identifiable, Hashable, Codable, Sendable {
     public var account: String
     /// `계정` 칸의 첫 백틱 역할 키(project.yaml `accounts`의 키). 없으면 nil.
     public var accountRoleKey: String? = nil
+    public var resetsAppData: Bool = false
     public var precondition: String?
     public var goal: String
     public var passCondition: String?
@@ -114,7 +115,7 @@ public struct PlanDocument: Sendable {
     }
 
     /// 계정 칸이 없으면(로그인하지 않는 시나리오) 계정 키도 요구하지 않는다.
-    private static func needsLogin(_ scenario: Scenario) -> Bool {
+    public static func needsLogin(_ scenario: Scenario) -> Bool {
         !scenario.account.isEmpty && !scenario.account.contains("로그아웃 상태")
     }
 
@@ -206,6 +207,7 @@ public struct PlanDocument: Sendable {
             var passCondition: String?
             var evidence: String?
             var runOptionsNote: String?
+            var resetsAppData = false
 
             for line in block {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -231,6 +233,8 @@ public struct PlanDocument: Sendable {
                     evidence = fieldValue(trimmed)
                 } else if trimmed.hasPrefix("- 실행 옵션:") {
                     runOptionsNote = fieldValue(trimmed)
+                } else if trimmed.hasPrefix("- 초기화:") {
+                    resetsAppData = fieldValue(trimmed).contains("앱 데이터")
                 }
             }
 
@@ -243,6 +247,7 @@ public struct PlanDocument: Sendable {
                     gradeNote: gradeNote,
                     account: account,
                     accountRoleKey: accountRoleKey,
+                    resetsAppData: resetsAppData,
                     precondition: precondition,
                     goal: goal,
                     passCondition: passCondition,

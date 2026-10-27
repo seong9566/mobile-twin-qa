@@ -189,7 +189,7 @@ struct RunProgressView: View {
     private var prepareLog: some View {
         DisclosureGroup(isExpanded: $isPrepareLogExpanded) {
             ScrollView(.horizontal) {
-                Text(appModel.stageLog)
+                Text(appModel.prepareLogTail.isEmpty ? "준비 로그가 없어요." : appModel.prepareLogTail)
                     .font(.system(.caption, design: .monospaced))
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -197,13 +197,19 @@ struct RunProgressView: View {
             }
             .background(Color.qaBackground)
         } label: {
-            Text("준비 단계 Claude Code 출력 — 빌드·설치·로그인 완료")
+            Text(prepareTitle)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(Color.qaSecondaryText)
         }
         .padding(10)
         .background(Color.qaSunken, in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.qaLine))
+    }
+
+    private var prepareTitle: String {
+        guard let result = appModel.prepareResult else { return "준비 로그" }
+        let line = String(format: "준비 완료 · %d:%02d", result.durationSeconds / 60, result.durationSeconds % 60)
+        return result.buildSkipped ? line + " · 빌드·설치 건너뜀" : line
     }
 
     private var statusBar: some View {
@@ -270,6 +276,12 @@ struct RunProgressView: View {
         case .waiting:
             Label("대기", systemImage: "circle.fill")
                 .foregroundStyle(Color.qaTertiaryText)
+        case .preparing:
+            HStack(spacing: 6) {
+                SwiftUI.ProgressView().controlSize(.small)
+                Text("초기화 중")
+            }
+            .foregroundStyle(Color.qaAccentInk)
         case .running:
             HStack(spacing: 6) {
                 SwiftUI.ProgressView().controlSize(.small)
@@ -319,6 +331,7 @@ struct RunProgressView: View {
     private func tapeState(_ state: ScenarioRunState) -> TapeState {
         switch state {
         case .waiting: .idle
+        case .preparing: .running
         case .running: .running
         case .finished: .done
         case .held: .hold

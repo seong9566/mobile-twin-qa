@@ -4,7 +4,6 @@ import Foundation
 public enum Stage: String, Codable, Sendable {
     case register = "등록"
     case plan = "계획"
-    case prepare = "준비"
     case judge = "판정"
 }
 
@@ -23,30 +22,6 @@ public enum StagePrompt {
             prompt += "\n- 답: \(answer)"
         }
         return prompt
-    }
-
-    public static func prepare(
-        project: ProjectRef,
-        plan: String,
-        runDir: String,
-        deviceSerial: String,
-        server: String,
-        scenarioIDs: [String],
-        buildInstall: Bool,
-        screenshotApproved: Bool
-    ) -> String {
-        """
-        앱 실행 모드: \(Stage.prepare.rawValue)
-        /qa-run
-        - 프로젝트: \(project.id)
-        - 계획: \(plan)
-        - 실행 폴더: \(runDir)
-        - 기기: \(deviceSerial)
-        - 서버: \(server)
-        - 시나리오: \(scenarioIDs.joined(separator: ", "))
-        - 빌드·설치: \(buildInstall ? "예" : "아니오")
-        - 스크린샷 전송 승인: \(project.category == .personal ? "해당 없음(개인)" : (screenshotApproved ? "예" : "아니오"))
-        """
     }
 
     public static func judge(project: ProjectRef, plan: String, runDir: String) -> String {

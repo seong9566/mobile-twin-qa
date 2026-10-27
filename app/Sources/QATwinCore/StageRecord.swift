@@ -112,7 +112,6 @@ public struct StageRecordStore: Sendable {
         let stageName = switch stage {
         case .register: "register"
         case .plan: "plan"
-        case .prepare: "prepare"
         case .judge: "judge"
         }
         return dir.appending(path: "\(stageName)-\(safeKey).json")

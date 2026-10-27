@@ -4,6 +4,8 @@ Artemis 설치 위치는 기기마다 다르므로 `ARTEMIS_HOME` 환경 변수�
 
 ## 서버
 
+QA 맥 앱에서 실행하면 앱이 승인 시트를 열 때 Artemis가 떠 있는지 보고, 꺼져 있으면 아래 `ui` 명령으로 띄운다(앱을 끝내면 함께 끈다). 채팅으로 돌릴 때만 직접 띄운다.
+
 ```bash
 (cd "$ARTEMIS_HOME" && uv run artemis doctor)           # 기기·키 점검 (먼저)
 (cd "$ARTEMIS_HOME" && uv run artemis ui --port 8100)   # 별도 터미널에서 띄워 둔다(끝나지 않음). 서브셸이라 현재 폴더는 그대로. 8000은 다른 서비스가 쓴다

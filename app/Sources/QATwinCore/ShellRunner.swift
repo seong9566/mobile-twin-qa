@@ -37,8 +37,16 @@ public struct ProcessShellRunner: ShellRunner {
         process.standardError = pipe
         process.standardOutput = pipe
 
-        return try await withCheckedThrowingContinuation { continuation in
+        // Task가 취소되면(준비 취소·앱 종료) 자식 프로세스 그룹을 끝내고 CancellationError로 돌아간다.
+        let holder = ShellStateHolder()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
             let state = ShellRunState(continuation: continuation)
+            // 시작하기 전에 이미 취소됐으면 프로세스를 띄우지 않는다.
+            guard holder.set(state) else {
+                _ = state.cancel()
+                return
+            }
             process.terminationHandler = { terminated in
                 state.exited(status: terminated.terminationStatus)
             }
@@ -47,6 +55,10 @@ public struct ProcessShellRunner: ShellRunner {
             } catch {
                 state.fail(error)
                 return
+            }
+            // run()과 취소가 겹쳤으면 여기서 끝낸다(취소 처리기는 시작 전이라 끝내지 않았다).
+            if holder.markStarted() {
+                terminateGroup(of: process)
             }
 
             // 파이프 버퍼가 차서 자식이 멈추지 않게 출력은 별도 스레드에서 EOF까지 읽는다.
@@ -77,13 +89,55 @@ public struct ProcessShellRunner: ShellRunner {
                 guard state.timeOut() else { return }
                 terminateGroup(of: process)
             }
+            }
+        } onCancel: {
+            if holder.cancel() {
+                terminateGroup(of: process)
+            }
         }
+    }
+}
+
+/// 취소 처리기와 실행 쪽이 같은 상태를 보게 한다. 프로세스를 끝내는 쪽은 정확히 하나다:
+/// 시작한 뒤 취소되면 취소 처리기가, 시작하는 사이에 취소되면 실행 쪽이 끝낸다. 시작 전이면 아무도 띄우지 않는다.
+private final class ShellStateHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var state: ShellRunState?
+    private var cancelled = false
+    private var started = false
+
+    /// 상태를 맡긴다. 이미 취소됐으면 false(띄우지 않는다).
+    func set(_ state: ShellRunState) -> Bool {
+        lock.withLock {
+            self.state = state
+            return !cancelled
+        }
+    }
+
+    /// process.run() 직후. 그사이 취소됐으면 true(실행 쪽이 끝낸다).
+    func markStarted() -> Bool {
+        lock.withLock {
+            started = true
+            return cancelled
+        }
+    }
+
+    /// 취소 처리기. 기다리는 쪽을 취소로 끝내고, 이미 시작한 프로세스면 true(취소 처리기가 끝낸다).
+    func cancel() -> Bool {
+        let (state, wasStarted): (ShellRunState?, Bool) = lock.withLock {
+            cancelled = true
+            return (self.state, started)
+        }
+        _ = state?.cancel()
+        return wasStarted
     }
 }
 
 /// Process는 자식을 자기 프로세스 그룹에 두므로 그룹째 끝낸다. 그룹이 아니면 그 프로세스만 끝낸다.
 private func terminateGroup(of process: Process) {
     let pid = process.processIdentifier
+    // 아직 띄우지 않은 프로세스(pid 0)에 kill하면 앱 자신의 그룹에 신호가 간다.
+    guard pid > 0 else { return }
     let ownsGroup = getpgid(pid) == pid
     Darwin.kill(ownsGroup ? -pid : pid, SIGTERM)
     DispatchQueue.global().asyncAfter(deadline: .now() + 2) {
@@ -122,6 +176,13 @@ private final class ShellRunState: @unchecked Sendable {
 
     func fail(_ error: Error) {
         lock.withLock { takeContinuation() }?.resume(throwing: error)
+    }
+
+    /// 아직 끝나지 않았으면 취소로 끝내고 true를 돌려준다.
+    func cancel() -> Bool {
+        guard let continuation = lock.withLock({ takeContinuation() }) else { return false }
+        continuation.resume(throwing: CancellationError())
+        return true
     }
 
     /// 아직 끝나지 않았으면 시간 초과로 끝내고 true를 돌려준다.

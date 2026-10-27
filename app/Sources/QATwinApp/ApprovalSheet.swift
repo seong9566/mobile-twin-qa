@@ -10,9 +10,19 @@ struct ApprovalSheet: View {
     @State private var unavailableDeviceCount = 0
     @State private var deviceSerial = ""
     @State private var server = ""
-    @State private var buildInstall = true
+    @State private var forceRebuild = false
+    @State private var loginRole: String?
+    @State private var checks: [PrepareStep: PrepareItemState] = [:]
+    @State private var isChecking = false
+    @State private var avdNames: [String: String] = [:]
+    @State private var buildLine: String?
+    /// buildLine을 계산한 기기. 지금 기기와 다르면 아직 빌드 여부를 모른다.
+    @State private var buildLineSerial: String?
+    @State private var isImportPresented = false
     @State private var screenshotApproved = false
     @State private var presentKeys: Set<String> = []
+    /// 가져오기가 끝날 때마다 올려 키 목록이 .env를 다시 읽게 한다(AccountsSection.reloadToken).
+    @State private var envRevision = 0
     @State private var accountRoles: [String: AccountRole] = [:]
     @State private var deviceError: String?
 
@@ -34,12 +44,25 @@ struct ApprovalSheet: View {
                 VStack(alignment: .leading, spacing: 14) {
                     runOptions
 
+                    prepareChecks
+
                     if let project = appModel.selectedProject, let plan = appModel.selectedPlan {
                         AccountsSection(
-                            keys: requiredKeys,
+                            keys: envKeys,
                             envURL: project.dir.appending(path: ".env"),
-                            onPresentKeysChange: { presentKeys = $0 }
+                            onPresentKeysChange: { presentKeys = $0 },
+                            title: "테스트 env",
+                            usage: envKeyUsage,
+                            reloadToken: envRevision
                         )
+                        HStack(spacing: 10) {
+                            Button("원본 .env에서 가져오기…", systemImage: "square.and.arrow.down") {
+                                isImportPresented = true
+                            }
+                            Text("원본 repo의 .env(git 무시)에서 고른 키만 복사해요. 값은 화면에 보이지 않아요.")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.qaTertiaryText)
+                        }
                         if !plan.accountEnvKeys.isEmpty,
                            plan.usesAllAccountKeys(for: selectedScenarios, roles: accountRoles) {
                             Text("계획에 역할 키가 없는 시나리오가 있어 계정 키를 모두 확인해요")
@@ -78,11 +101,12 @@ struct ApprovalSheet: View {
                 Button("취소") { dismiss() }
                 Button("시작") {
                     let approval = Approval(
-                        buildInstall: buildInstall,
                         deviceSerial: deviceSerial,
                         server: server,
                         scenarioIDs: selectedScenarios.map(\.id),
-                        screenshotApproved: screenshotApproved
+                        screenshotApproved: screenshotApproved,
+                        loginRole: loginRole,
+                        forceRebuild: forceRebuild
                     )
                     Task { await appModel.startRun(approval) }
                 }
@@ -92,12 +116,36 @@ struct ApprovalSheet: View {
             .padding(.horizontal, 24)
             .padding(.vertical, 12)
         }
-        .frame(width: 640, height: 700)
-        .task { await loadDevices() }
+        .frame(width: 680, height: 746)
+        .task { await refreshChecks() }
+        // 기기가 잠겨 있으면 5초마다 다시 본다(스펙 5.9).
+        .task(id: isDeviceWaiting) {
+            while isDeviceWaiting, !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(5))
+                guard !Task.isCancelled else { return }
+                await refreshPreflight()
+            }
+        }
+        .onChange(of: deviceSerial) { _, _ in Task { await refreshPreflight() } }
+        .onChange(of: server) { _, _ in Task { await refreshPreflight() } }
+        .sheet(isPresented: $isImportPresented) {
+            if let project = appModel.selectedProject, let source = appModel.sourceDirectory(for: project) {
+                EnvImportSheet(
+                    sourceDir: source,
+                    envSource: appModel.projectConfig(for: project).envSource,
+                    projectEnv: project.dir.appending(path: ".env"),
+                    onDone: {
+                        presentKeys = currentPresentKeys
+                        envRevision += 1
+                    }
+                )
+            }
+        }
         .onAppear {
             server = servers.first ?? ""
             presentKeys = currentPresentKeys
             accountRoles = currentAccountRoles
+            loginRole = LoginPlan.defaultRole(scenarios: selectedScenarios, roles: accountRoles)
         }
     }
 
@@ -139,14 +187,15 @@ struct ApprovalSheet: View {
                 .disabled(servers.isEmpty)
             }
             Divider()
-            optionRow("빌드·설치") {
-                Toggle("", isOn: $buildInstall)
-                    .labelsHidden()
-                    .toggleStyle(.switch)
-            }
-            Divider()
             optionRow("시나리오", alignment: .top) {
-                Text(selectedScenarios.map(\.id).joined(separator: " → "))
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(selectedScenarios.map(\.id).joined(separator: " → "))
+                    ForEach(selectedScenarios.filter(\.resetsAppData)) { scenario in
+                        Text("\(scenario.id) 앞에서 앱 데이터를 초기화해요")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Color.qaTertiaryText)
+                    }
+                }
             }
 
             let humanTasks = selectedScenarios.filter { $0.grade == .B }
@@ -230,10 +279,221 @@ struct ApprovalSheet: View {
         appModel.selectedPlan?.requiredEnvKeys(for: selectedScenarios, roles: accountRoles) ?? []
     }
 
+    // MARK: 준비 점검 (스펙 5.9 · 목업 3b)
+
+    private var prepareChecks: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text("준비 점검")
+                    .font(.system(size: 12, weight: .semibold))
+                Text(isChecking ? "확인하는 중…" : "Artemis는 기기 목록에 필요해 바로 띄우고, 테스트 서버는 시작할 때 띄워요")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.qaTertiaryText)
+                Spacer()
+                Button("다시 확인") { Task { await refreshChecks() } }
+                    .controlSize(.small)
+                    .disabled(isChecking)
+            }
+            VStack(spacing: 0) {
+                checkRow("Artemis 서버", checks[.artemis])
+                Divider()
+                if case .skipped = checks[.server] {} else {
+                    checkRow("테스트 서버 \(server)", checks[.server])
+                    Divider()
+                }
+                checkRow("기기", checks[.device])
+                Divider()
+                buildRow
+                if !accountRoles.isEmpty {
+                    Divider()
+                    optionRow("로그인 역할") {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Picker("로그인 역할", selection: $loginRole) {
+                                ForEach(accountRoles.keys.sorted(), id: \.self) { key in
+                                    Text("\(key) — \(accountRoles[key]?.idEnv ?? "")").tag(Optional(key))
+                                }
+                            }
+                            .labelsHidden()
+                            Text(loginDetail)
+                                .font(.system(size: 11))
+                                .foregroundStyle(Color.qaTertiaryText)
+                        }
+                    }
+                }
+            }
+            .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 7))
+            .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.qaLine))
+        }
+    }
+
+    private func checkRow(_ title: String, _ state: PrepareItemState?) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            checkIcon(state).frame(width: 16)
+            Text(title)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 110, alignment: .leading)
+            Text(checkText(state))
+                .font(.system(size: 12))
+                .foregroundStyle(checkColor(state))
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 38)
+    }
+
+    private var buildRow: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Image(systemName: forceRebuild || buildLine != nil ? "play.circle" : (isBuildDecided ? "minus" : "circle"))
+                .foregroundStyle(isBuildDecided || forceRebuild ? Color.qaAccentInk : Color.qaIdle)
+                .frame(width: 16)
+            Text("빌드·설치")
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 110, alignment: .leading)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(forceRebuild ? "다시 빌드해요" : !isBuildDecided ? "기기를 확인하면 정해요" : (buildLine ?? "건너뜀 — 기기에 설치된 빌드가 지금 소스와 같아요"))
+                    .font(.system(size: 12))
+                if let project = appModel.selectedProject, !appModel.projectConfig(for: project).usesQAAppEnv {
+                    Text("빌드가 원본 .env를 읽어요 — 고른 서버가 빌드에 반영되지 않아요")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.qaWarn)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            Toggle("그래도 다시 빌드", isOn: $forceRebuild)
+                .toggleStyle(.checkbox)
+                .font(.system(size: 12))
+                .fixedSize()
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minHeight: 38)
+    }
+
+    @ViewBuilder
+    private func checkIcon(_ state: PrepareItemState?) -> some View {
+        switch state {
+        case .done: Image(systemName: "checkmark").fontWeight(.bold).foregroundStyle(Color.qaPass)
+        case .waitingForHuman: Image(systemName: "exclamationmark.triangle").foregroundStyle(Color.qaWarn)
+        case .failed: Image(systemName: "xmark").fontWeight(.bold).foregroundStyle(Color.qaFail)
+        case .skipped: Image(systemName: "minus").foregroundStyle(Color.qaTertiaryText)
+        case .running, .waiting, nil: ProgressView().controlSize(.mini)
+        }
+    }
+
+    private func checkText(_ state: PrepareItemState?) -> String {
+        switch state {
+        case .done(let detail): detail.isEmpty ? "확인했어요" : detail
+        case .skipped(let detail), .waitingForHuman(let detail), .failed(let detail): detail
+        case .running, .waiting, nil: "확인하는 중…"
+        }
+    }
+
+    private func checkColor(_ state: PrepareItemState?) -> Color {
+        switch state {
+        case .waitingForHuman: .qaWarn
+        case .failed: .qaFail
+        default: .qaText
+        }
+    }
+
+    private var loginDetail: String {
+        let plan = LoginPlan.make(scenarios: selectedScenarios, roles: accountRoles, chosenRole: loginRole)
+        switch plan.when {
+        case .none: return "로그인하는 시나리오가 없어요"
+        case .duringPrepare: return "앱이 값을 넣고 '로그인'을 눌러요. 역할 키가 적힌 시나리오는 그 역할을 써요"
+        case .beforeScenario(let id): return "\(id) 앞에서 로그인해요. 역할 키가 적힌 시나리오는 그 역할을 써요"
+        }
+    }
+
+    private var isBuildDecided: Bool {
+        !deviceSerial.isEmpty && buildLineSerial == deviceSerial
+    }
+
+    private var isDeviceWaiting: Bool {
+        if case .waitingForHuman = checks[.device] { return true }
+        return false
+    }
+
+    private func refreshChecks() async {
+        isChecking = true
+        // 먼저 점검을 돌려 Artemis가 꺼져 있으면 띄운 뒤 기기 목록을 읽는다.
+        checks = await appModel.preflight(serial: deviceSerial, server: server, loginRole: loginRole, scenarioIDs: selectedScenarios.map(\.id))
+        let artemis = checks[.artemis]
+        await loadDevices()
+        if !deviceSerial.isEmpty {
+            await refreshPreflight()
+            // 두 번째 점검은 이미 떠 있는 Artemis를 보므로 "띄웠어요"를 남긴다.
+            if case .done(let detail) = artemis, detail.contains("띄웠") { checks[.artemis] = artemis }
+        }
+        isChecking = false
+    }
+
+    private func refreshPreflight() async {
+        guard !deviceSerial.isEmpty else { return }
+        let serial = deviceSerial
+        let artemis = checks[.artemis]
+        var updated = await appModel.preflight(serial: serial, server: server, loginRole: loginRole, scenarioIDs: selectedScenarios.map(\.id))
+        // 점검 중에 기기를 바꿨으면 이 결과는 버린다. 새 기기의 점검이 따로 돈다.
+        guard deviceSerial == serial else { return }
+        if case .done(let detail) = artemis, detail.contains("띄웠") { updated[.artemis] = artemis }
+        checks = updated
+        let line = await buildDecisionLine(serial: serial)
+        guard deviceSerial == serial else { return }
+        buildLine = line
+        buildLineSerial = serial
+    }
+
+    /// 설치 기록과 지금 소스 커밋으로 빌드를 건너뛸지 미리 보인다. 서버 설정 해시는 준비 단계가 다시 본다.
+    private func buildDecisionLine(serial: String) async -> String? {
+        guard let project = appModel.selectedProject else { return nil }
+        let entry = InstallRecords.load(projectDir: project.dir)[serial]
+        let source = await appModel.planSourceInfo(for: project)
+        guard let entry else { return "이 기기에 설치한 기록이 없어요 → 빌드해요" }
+        if source?.isDirty == true { return "소스에 커밋하지 않은 변경이 있어요 → 빌드해요" }
+        if let commit = source?.commit, !entry.commit.hasPrefix(commit) {
+            return "설치본 \(entry.commit.prefix(8)) ≠ 소스 \(commit) → 빌드해요"
+        }
+        return nil
+    }
+
+    // MARK: 테스트 env 키
+
+    /// 로그인 키(필수) + 빌드 키(.env의 나머지 + .env.example에만 있는 키).
+    private var envKeys: [String] {
+        var keys = requiredKeys
+        for key in buildKeys where !keys.contains(key) { keys.append(key) }
+        return keys
+    }
+
+    private var envKeyUsage: [String: String] {
+        var usage: [String: String] = [:]
+        for key in requiredKeys { usage[key] = "로그인" }
+        for key in buildKeys where usage[key] == nil { usage[key] = "빌드" }
+        return usage
+    }
+
+    private var buildKeys: [String] {
+        guard let project = appModel.selectedProject else { return [] }
+        let accountKeys = Set(Workspace.accountEnvKeys(projectYAML: (try? String(contentsOf: project.dir.appending(path: "project.yaml"), encoding: .utf8)) ?? ""))
+        var keys = EnvFile(url: project.dir.appending(path: ".env")).entriesInOrder().map(\.key).filter { !accountKeys.contains($0) }
+        if let source = appModel.sourceDirectory(for: project) {
+            let example = source.appending(path: appModel.projectConfig(for: project).envSource)
+                .deletingLastPathComponent().appending(path: ".env.example")
+            for key in EnvFile(url: example).entriesInOrder().map(\.key) where !keys.contains(key) && !accountKeys.contains(key) {
+                keys.append(key)
+            }
+        }
+        return keys
+    }
+
     private var blocker: String? {
         let missing = requiredKeys.filter { !presentKeys.contains($0) }
         if !missing.isEmpty { return missing.joined(separator: ", ") + " 값이 없어요" }
+        if case .failed(let reason) = checks[.artemis] { return reason }
         if devices.isEmpty || deviceSerial.isEmpty { return "기기를 연결하고 잠금을 해제해 주세요" }
+        if case .waitingForHuman(let reason) = checks[.device] { return reason }
+        if case .waitingForHuman(let reason) = checks[.server], reason.contains("직접") { return reason }
         if server.isEmpty { return "서버를 선택해 주세요" }
         if appModel.selectedProject?.category == .company, !screenshotApproved {
             return "스크린샷 전송 동의가 필요해요"
@@ -254,8 +514,15 @@ struct ApprovalSheet: View {
             devices = choices.usable
             busyDeviceCount = choices.busyCount
             unavailableDeviceCount = choices.unavailableCount
-            deviceSerial = devices.first?.serial ?? ""
+            if !devices.contains(where: { $0.serial == deviceSerial }) {
+                deviceSerial = devices.first?.serial ?? ""
+            }
             deviceError = nil
+            for device in devices where DeviceProbe.isEmulator(device.serial) {
+                if let adb = appModel.adbExecutable {
+                    avdNames[device.serial] = await DeviceProbe(shell: ProcessShellRunner(), adbPath: adb).avdName(serial: device.serial)
+                }
+            }
         } catch ArtemisError.unreachable {
             deviceError = "Artemis 서버에 연결하지 못했어요 (\(appModel.artemisURL)) — 설정의 주소를 확인하거나 서버를 띄워 주세요"
         } catch ArtemisError.http(let code) {
@@ -272,7 +539,10 @@ struct ApprovalSheet: View {
     }
 
     private func deviceLabel(_ device: ArtemisDevice) -> String {
-        [device.model, device.serial].compactMap { $0 }.joined(separator: " · ")
+        if DeviceProbe.isEmulator(device.serial) {
+            return "에뮬레이터 \(avdNames[device.serial] ?? device.model ?? "") · \(device.serial)"
+        }
+        return [device.model, device.serial].compactMap { $0 }.joined(separator: " · ")
     }
 }
 

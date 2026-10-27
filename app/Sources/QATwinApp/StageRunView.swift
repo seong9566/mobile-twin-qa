@@ -141,7 +141,6 @@ struct StageRunView: View {
         switch stage {
         case .register: "프로젝트를 등록하고 있어요"
         case .plan: "테스트 계획을 쓰고 있어요"
-        case .prepare: "실행을 준비하고 있어요"
         case .judge: "결과를 판정하고 있어요"
         }
     }
@@ -152,8 +151,6 @@ struct StageRunView: View {
             "Claude Code가 앱 소스와 프로젝트 정보를 확인해 등록해요. 끝나면 새 계획의 범위를 정하는 화면으로 가요."
         case .plan:
             "Claude Code가 소스와 문서를 읽고 시나리오를 써요. 아래 항목은 실제 진행에 맞춰 체크되고, 끝나면 요약을 보여 드려요. 보통 5–15분 걸려요."
-        case .prepare:
-            "Claude Code가 승인한 기기·서버·시나리오로 실행 폴더를 준비해요."
         case .judge:
             "Claude Code가 실행 기록을 읽고 결과를 판정해요. 아래 항목은 실제 진행에 맞춰 체크돼요."
         }
@@ -181,7 +178,6 @@ struct StageRunView: View {
         switch stage {
         case .register: ["소스 확인", "프로젝트 등록", "설정 저장"]
         case .plan: StageProgress.planSteps
-        case .prepare: ["승인 내용 확인", "실행 폴더 만들기", "실행 준비"]
         case .judge: StageProgress.judgeSteps
         }
     }

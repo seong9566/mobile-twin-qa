@@ -41,6 +41,7 @@ runners: { android: artemis, ios: mobile-mcp }
 
 - platform: <android|ios|both> · 등급: <A|B|C> · 계정: <역할> (`<accounts 역할 키>`)
 - 사전 조건:
+- 초기화: <앱 데이터 | 없음 — 빈 상태에서 시작해야 할 때만 "앱 데이터">
 - goal: <도구에 그대로 넣는 지시문 — 비밀번호 금지>
 - 통과 조건:
 - 근거: <파일:줄 · 문서>

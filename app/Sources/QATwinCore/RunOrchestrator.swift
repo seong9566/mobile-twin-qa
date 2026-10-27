@@ -2,6 +2,8 @@ import Foundation
 
 public enum ScenarioRunState: Codable, Equatable, Sendable {
     case waiting
+    /// 시나리오 직전 앱 데이터 초기화·재로그인 중.
+    case preparing
     case running(sessionID: String)
     case finished(sessionID: String, artemis: String)
     case held(reason: String)
@@ -15,6 +17,8 @@ public struct RunStateFile: Codable {
     public var order: [String]
     public var states: [String: ScenarioRunState]
     public var usage: Usage
+    /// 앱이 한 실행 준비 기록. 예전 run-state.json에는 없다.
+    public var prepare: PrepareResult?
 
     public init(
         plan: String,
@@ -22,7 +26,8 @@ public struct RunStateFile: Codable {
         server: String,
         order: [String],
         states: [String: ScenarioRunState],
-        usage: Usage
+        usage: Usage,
+        prepare: PrepareResult? = nil
     ) {
         self.plan = plan
         self.deviceSerial = deviceSerial
@@ -30,6 +35,44 @@ public struct RunStateFile: Codable {
         self.order = order
         self.states = states
         self.usage = usage
+        self.prepare = prepare
+    }
+}
+
+/// 시나리오 직전 앱 데이터 초기화·재로그인에 쓰는 값(스펙 5.7·5.8).
+public struct ResetContext: Sendable {
+    public let package: String
+    public let launch: String
+    public let permissions: [String]
+    public let loginScript: URL
+    public let envURL: URL
+    public let roles: [String: AccountRole]
+    public let chosenRole: String?
+    /// LoginPlan.when이 .beforeScenario(id)면 그 id. 초기화 칸이 없어도 그 시나리오 앞에서 로그인한다.
+    public let loginBefore: String?
+    /// 초기화 실패 사유를 run-state·화면에 남기기 전에 가릴 .env 값.
+    public let secrets: [String]
+
+    public init(
+        package: String,
+        launch: String,
+        permissions: [String],
+        loginScript: URL,
+        envURL: URL,
+        roles: [String: AccountRole],
+        chosenRole: String?,
+        loginBefore: String?,
+        secrets: [String] = []
+    ) {
+        self.package = package
+        self.launch = launch
+        self.permissions = permissions
+        self.loginScript = loginScript
+        self.envURL = envURL
+        self.roles = roles
+        self.chosenRole = chosenRole
+        self.loginBefore = loginBefore
+        self.secrets = secrets
     }
 }
 
@@ -75,6 +118,7 @@ public actor RunOrchestrator {
     private let fileManager = FileManager.default
     private let plan: PlanDocument
     private let pollInterval: Duration
+    private let reset: ResetContext?
     public nonisolated let runDir: URL
     private let scenarios: [Scenario]
     private let shell: ShellRunner
@@ -106,7 +150,9 @@ public actor RunOrchestrator {
         tracesDir: URL?,
         adbPath: String?,
         pollInterval: Duration = .seconds(5),
-        clock: any Clock<Duration> = ContinuousClock()
+        clock: any Clock<Duration> = ContinuousClock(),
+        reset: ResetContext? = nil,
+        prepare: PrepareResult? = nil
     ) {
         let events = AsyncStream<RunEvent>.makeStream()
         let order = scenarios.map(\.id)
@@ -119,6 +165,7 @@ public actor RunOrchestrator {
         self.eventStream = events.stream
         self.plan = plan
         self.pollInterval = pollInterval
+        self.reset = reset
         self.runDir = runDir
         self.scenarios = scenarios
         self.shell = shell
@@ -128,7 +175,8 @@ public actor RunOrchestrator {
             server: server,
             order: order,
             states: Dictionary(uniqueKeysWithValues: order.map { ($0, .waiting) }),
-            usage: emptyUsage()
+            usage: emptyUsage(),
+            prepare: prepare
         )
         self.tracesDir = tracesDir
     }
@@ -234,6 +282,13 @@ public actor RunOrchestrator {
             )
         }
 
+        if let failure = await resetIfNeeded(scenario) {
+            let reason = SecretRedactor.redact(failure, values: reset?.secrets ?? [])
+            setState(.held(reason: "초기화 실패: \(reason)"), for: scenario.id)
+            currentID = nil
+            return .continued
+        }
+
         let sessionID: String
         do {
             sessionID = try await api.run(
@@ -311,7 +366,7 @@ public actor RunOrchestrator {
                 traceLogMissingCount = 0
             }
             if log.exists, log.reader?.containsSpendLimit == true {
-                try? await api.stop(sessionID)
+                await stopSession(sessionID)
                 setState(.held(reason: "API 지출 한도"), for: scenario.id)
                 markWaitingAsNotRun(reason: "API 지출 한도")
                 continuation.yield(.spendLimitReached)
@@ -370,6 +425,70 @@ public actor RunOrchestrator {
         }
     }
 
+    /// 초기화 칸이 있거나 처음 로그인할 시나리오면 `POST /api/run` 전에 앱을 다시 준비한다. 실패하면 이유를 돌려준다.
+    private func resetIfNeeded(_ scenario: Scenario) async -> String? {
+        guard let reset, let adbPath,
+              scenario.resetsAppData || scenario.id == reset.loginBefore
+        else { return nil }
+        setState(.preparing, for: scenario.id)
+        func adb(_ args: [String], timeout: Duration) async -> (status: Int32, out: String)? {
+            try? await shell.run(adbPath, ["-s", deviceSerial] + args, timeout: timeout)
+        }
+        if scenario.resetsAppData {
+            guard let cleared = await adb(["shell", "pm", "clear", reset.package], timeout: .seconds(30)),
+                  cleared.status == 0
+            else { return "앱 데이터를 지우지 못했어요" }
+            // 개별 권한 실패는 실패가 아니다(스펙 5.7). adb가 끊기면 다음 명령에서 드러난다.
+            // 개별 권한 실패는 실패가 아니다. 묶음이 30초를 넘기거나 adb가 끊기면 실패(스펙 5.7).
+            let started = Date()
+            for permission in reset.permissions {
+                let remaining = 30 - Date().timeIntervalSince(started)
+                guard remaining > 0 else { return "권한 부여가 30초 안에 끝나지 않았어요" }
+                guard await adb(["shell", "pm", "grant", reset.package, permission], timeout: .seconds(remaining)) != nil else {
+                    return "권한을 주지 못했어요 — adb 연결을 확인해 주세요"
+                }
+            }
+        }
+        guard let launched = await adb(["shell", "am", "start", "-n", reset.launch], timeout: .seconds(20)),
+              launched.status == 0
+        else { return "앱을 실행하지 못했어요" }
+        guard PlanDocument.needsLogin(scenario) else { return nil }
+        guard let roleKey = LoginPlan.role(for: scenario, chosenRole: reset.chosenRole, roles: reset.roles),
+              let role = reset.roles[roleKey]
+        else { return "로그인할 역할이 없어요" }
+        let arguments = [
+            reset.loginScript.path, deviceSerial, reset.envURL.path, role.idEnv, role.passwordEnv,
+            "--tap", "로그인", "--wait", "50",
+        ]
+        for attempt in 0..<2 {
+            // GUI 앱의 PATH에는 adb가 없다. 로그인 셸로 부르고 adb 폴더를 PATH 앞에 둔다.
+            let body = "export PATH=\"$QA_ADB_DIR:$PATH\"; bash " + arguments.map(Self.shellQuote).joined(separator: " ")
+            let shellCall = LoginShell.arguments(body, exports: [("QA_ADB_DIR", URL(fileURLWithPath: adbPath).deletingLastPathComponent().path)])
+            guard let result = try? await shell.run(shellCall.exe, shellCall.args, timeout: .seconds(120)) else {
+                return "로그인이 120초 안에 끝나지 않았어요"
+            }
+            switch LoginOutcome.interpret(status: result.status, output: result.out, freshInstallOrReset: scenario.resetsAppData) {
+            case .loggedIn, .alreadyLoggedIn:
+                return nil
+            case .retryOnce(let message):
+                if attempt == 1 { return message }
+            case .failed(let message):
+                return message.isEmpty ? "로그인하지 못했어요" : message
+            }
+        }
+        return "로그인하지 못했어요"
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// 세션 중지 요청은 실행 Task가 취소돼도(앱 종료) 보낸다. 터미널·다른 기기의 Artemis가 기기를 계속 조작하지 않게.
+    private func stopSession(_ sessionID: String) async {
+        let api = self.api
+        await Task.detached { try? await api.stop(sessionID) }.value
+    }
+
     private func setState(_ state: ScenarioRunState, for id: String) {
         guard stateFile.states[id] != state else {
             return
@@ -394,7 +513,7 @@ public actor RunOrchestrator {
         guard stopAllRequested || stopCurrentRequested else {
             return false
         }
-        try? await api.stop(sessionID)
+        await stopSession(sessionID)
         setState(.held(reason: "사용자 중지"), for: id)
         logReaders[id] = nil
         currentID = nil

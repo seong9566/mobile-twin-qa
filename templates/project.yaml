@@ -8,16 +8,29 @@ apps:
   android:
     package: <applicationId>
     launch: <package>/.MainActivity
+    permissions:                               # 설치·초기화 뒤 pm grant할 런타임 권한
+      - android.permission.ACCESS_FINE_LOCATION
+      - android.permission.POST_NOTIFICATIONS
   ios:
     bundle_id: <PRODUCT_BUNDLE_IDENTIFIER>
 
 build:                        # 소스 루트 기준 명령
-  android: <예: flutter build apk --debug --dart-define-from-file=.env>
+  android: <예: flutter build apk --debug --dart-define-from-file=$QA_APP_ENV>
   android_apk: <빌드 산출물 경로>
+  env_source: .env            # 원본 repo에서 가져올 env 파일 경로
   ios: <예: xcodebuild ... / flutter build ios --simulator>
 
-environments:                 # 이름만. 실제 주소가 비밀이면 .env 키 이름을 적는다
-  default: dev
+environments:
+  default: local
+  local:
+    health: http://{{mac_ip}}:5199/health
+    start: server/run.sh --urls http://0.0.0.0:5199
+    cwd: .
+    start_timeout: 180
+    vars: { API_BASE_URL: "http://{{mac_ip}}:5199" }
+  dev:
+    health: https://dev-api.example.com/health
+    vars: { API_BASE_URL: "https://dev-api.example.com" }
 
 accounts:                     # 역할 → .env 키 이름 (값은 .env에만)
   # field_worker: { id_env: TEST_USER_ID, password_env: TEST_USER_PASSWORD }

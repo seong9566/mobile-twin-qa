@@ -5,11 +5,13 @@ import QATwinCore
 import SwiftUI
 
 struct Approval {
-    var buildInstall: Bool
     var deviceSerial: String
     var server: String
     var scenarioIDs: [String]
     var screenshotApproved: Bool
+    /// 승인 시트에서 고른 로그인 역할(project.yaml `accounts`의 키). 계정이 없으면 nil.
+    var loginRole: String?
+    var forceRebuild: Bool
 }
 
 struct ActiveRun {
@@ -29,6 +31,8 @@ enum AppPhase: Equatable {
     /// 계획을 다 쓴 뒤 목록 확인으로 넘어가기 전 요약.
     case planSummary(URL)
     case reviewing
+    /// 앱이 셸로 실행을 준비하는 화면. 실행 폴더는 준비가 끝난 뒤에 만든다.
+    case preparing(runName: String)
     case running(runDir: URL)
     case results(runDir: URL)
 }
@@ -118,6 +122,11 @@ final class AppModel {
     var runUsage = Usage(llm_calls: 0, prompt_tokens: 0, completion_tokens: 0)
     var runDeviceSerial = ""
     var runServer = ""
+    /// 준비 화면에 보일 항목 상태·로그·결과.
+    var prepareItems: [PrepareStep: PrepareItemState] = [:]
+    var prepareLogTail = ""
+    var prepareResult: PrepareResult?
+    var prepareStartedAt: Date?
     var runScenarioCalls: [String: Int] = [:]
     var runStartedAt: [String: Date] = [:]
     var runFinishedAt: [String: Date] = [:]
@@ -145,6 +154,13 @@ final class AppModel {
     @ObservationIgnored private var loadErrorShownRuns: Set<String> = []
     @ObservationIgnored private var reviewSaveTask: Task<Void, Never>?
     @ObservationIgnored private var runOrchestrator: RunOrchestrator?
+    @ObservationIgnored private var prepareCoordinator: PrepareCoordinator?
+    /// 실행 루프(orchestrator.start·retry)를 도는 Task. 앱을 끝낼 때 취소해 초기화 중인 셸 명령도 끊는다.
+    @ObservationIgnored private var runOperationTask: Task<Bool, Never>?
+    @ObservationIgnored private var prepareContext: (input: PrepareInput, approval: Approval, plannedRunDir: URL)?
+    /// 앱이 띄운 Artemis·테스트 서버를 띄우는 순간부터 기억한다. 앱이 끝날 때 함께 끝낸다.
+    @ObservationIgnored private let processLauncher = TrackingProcessLauncher()
+    @ObservationIgnored private var lockNotified = false
     @ObservationIgnored private var runOrchestratorContext: ActiveRun?
     @ObservationIgnored private var stageResultIsError: Bool?
     @ObservationIgnored private var stageResultSummary = ""
@@ -491,66 +507,225 @@ final class AppModel {
     }
 
     func startRun(_ approval: Approval) async {
-        guard let workspace, let project = selectedProject, let plan = selectedPlan else {
+        guard workspace != nil, let project = selectedProject, let plan = selectedPlan else {
             notice = AppNotice(title: "실행할 수 없어요", message: "사이드바에서 프로젝트와 계획을 다시 골라 주세요.")
             return
         }
         isApprovalPresented = false
         Notifier.requestAuthorization()
-        // catch에서 지울 폴더는 이번에 만든 폴더뿐이다(이전 실행의 activeRun을 보지 않는다).
-        var createdRunDir: URL?
+        let scenarios = orderedScenarios.filter { approval.scenarioIDs.contains($0.id) }
+        let plannedRunDir = plannedRunDirectory(project: project, plan: plan.url)
+        guard let input = prepareInput(
+            project: project,
+            plan: plan,
+            scenarios: scenarios,
+            serial: approval.deviceSerial,
+            server: approval.server,
+            loginRole: approval.loginRole,
+            forceRebuild: approval.forceRebuild,
+            runName: plannedRunDir.lastPathComponent
+        ) else {
+            notice = AppNotice(title: "실행할 수 없어요", message: "adb를 찾지 못했어요. 설정의 adb 경로를 확인해 주세요.")
+            return
+        }
+        // 실행 폴더는 아직 없지만 실행 중으로 보이게(사이드바·단계 잠금) 계획한 경로로 둔다.
+        activeRun = ActiveRun(runDir: plannedRunDir, project: project, plan: plan, scenarioIDs: approval.scenarioIDs)
+        let coordinator = PrepareCoordinator(
+            input: input,
+            api: ArtemisClient(base: URL(string: artemisURL) ?? URL(string: "http://127.0.0.1:8100")!),
+            shell: ProcessShellRunner(),
+            health: URLSessionHealthChecker(),
+            launcher: processLauncher
+        )
+        prepareCoordinator = coordinator
+        prepareContext = (input, approval, plannedRunDir)
+        prepareItems = [:]
+        prepareLogTail = ""
+        prepareResult = nil
+        prepareStartedAt = .now
+        lockNotified = false
+        runDeviceSerial = approval.deviceSerial
+        runServer = approval.server
+        phase = .preparing(runName: plannedRunDir.lastPathComponent)
+        await consumePrepare(coordinator, starting: { await coordinator.run() })
+    }
+
+    /// 준비 화면의 "다시 시도". 실패한 항목부터 다시 한다.
+    func retryPrepare() async {
+        guard let coordinator = prepareCoordinator else { return }
+        prepareResult = nil
+        await consumePrepare(coordinator, starting: { await coordinator.retryFromFailed() })
+    }
+
+    /// 준비 화면의 "목록으로"·"준비 취소". 실행 폴더는 만들지 않았으므로 지울 것이 없다.
+    func cancelPrepare() async {
+        // 결과가 이미 왔어도(실패 뒤 "목록으로") 취소는 해 둔다. 끝난 코디네이터에는 영향이 없다.
+        if let coordinator = prepareCoordinator {
+            await coordinator.cancel()
+        }
+        prepareCoordinator = nil
+        prepareContext = nil
+        activeRun = nil
+        phase = selectedPlan == nil ? .empty : .reviewing
+    }
+
+    func recheckPrepareDevice() async {
+        await prepareCoordinator?.recheckDevice()
+    }
+
+    /// 승인 시트의 준비 점검. Artemis가 꺼져 있고 이 맥이면 띄운다(스펙 5.3).
+    func preflight(serial: String, server: String, loginRole: String?, scenarioIDs: [String]) async -> [PrepareStep: PrepareItemState] {
+        guard let project = selectedProject, let plan = selectedPlan,
+              let input = prepareInput(
+                  project: project,
+                  plan: plan,
+                  scenarios: orderedScenarios.filter { scenarioIDs.contains($0.id) },
+                  serial: serial,
+                  server: server,
+                  loginRole: loginRole,
+                  forceRebuild: false,
+                  runName: "preflight"
+              )
+        else { return [:] }
+        let result = await PrepareCoordinator.preflight(
+            input: input,
+            api: ArtemisClient(base: URL(string: artemisURL) ?? URL(string: "http://127.0.0.1:8100")!),
+            shell: ProcessShellRunner(),
+            health: URLSessionHealthChecker(),
+            launcher: processLauncher
+        )
+        return result.items
+    }
+
+    /// 이 프로젝트의 project.yaml 설정.
+    func projectConfig(for project: ProjectRef) -> ProjectConfig {
+        ProjectConfig.parse((try? String(contentsOf: project.dir.appending(path: "project.yaml"), encoding: .utf8)) ?? "")
+    }
+
+    /// 계획을 쓸 소스: project.local.yaml의 source_path, 없으면 .cache/repos/<project>.
+    func sourceDirectory(for project: ProjectRef) -> URL? {
+        guard let workspace else { return nil }
+        return URL(fileURLWithPath: project.sourcePath.map(expandedPath)
+            ?? workspace.root.appending(path: ".cache/repos/\(project.name)").path)
+    }
+
+    private func prepareInput(
+        project: ProjectRef,
+        plan: PlanDocument,
+        scenarios: [Scenario],
+        serial: String,
+        server: String,
+        loginRole: String?,
+        forceRebuild: Bool,
+        runName: String
+    ) -> PrepareInput? {
+        guard let workspace, let adb = resolvedADBPath(), let sourceDir = sourceDirectory(for: project) else { return nil }
+        return PrepareInput(
+            projectDir: project.dir,
+            sourceDir: sourceDir,
+            config: projectConfig(for: project),
+            serverName: server,
+            serial: serial,
+            scenarios: scenarios,
+            plan: plan,
+            loginRole: loginRole,
+            forceRebuild: forceRebuild,
+            artemisURL: URL(string: artemisURL) ?? URL(string: "http://127.0.0.1:8100")!,
+            artemisHome: URL(fileURLWithPath: expandedPath(artemisHome)),
+            tracesDir: artemisTracesDir.isEmpty ? nil : URL(fileURLWithPath: expandedPath(artemisTracesDir)),
+            adbPath: adb,
+            loginScript: workspace.root.appending(path: "tools/android-login.sh"),
+            logURL: PrepareLog.url(project: project, runName: runName)
+        )
+    }
+
+    private func consumePrepare(_ coordinator: PrepareCoordinator, starting operation: @escaping @Sendable () async -> Void) async {
+        let operationTask = Task { await operation() }
+        var finished: PrepareResult?
+        for await event in coordinator.events {
+            // 취소한 뒤 새 준비를 시작했으면 이전 준비의 이벤트는 버린다.
+            guard prepareCoordinator === coordinator else {
+                if case .finished = event { break }
+                continue
+            }
+            switch event {
+            case .item(let step, let state):
+                prepareItems[step] = state
+                if step == .device, case .waitingForHuman(let reason) = state, !lockNotified {
+                    lockNotified = true
+                    // 잠금만이 아니라 연결·Wi-Fi일 수도 있으니 이유를 그대로 알린다.
+                    Notifier.send(title: "기기를 확인해 주세요", body: "\(reason) — 고치면 준비를 이어서 해요.")
+                }
+            case .log(let line):
+                let lines = (prepareLogTail.isEmpty ? [] : prepareLogTail.components(separatedBy: "\n")) + [line]
+                prepareLogTail = lines.suffix(200).joined(separator: "\n")
+            case .finished(let result):
+                finished = result
+            }
+            if finished != nil { break }
+        }
+        await operationTask.value
+        guard prepareCoordinator === coordinator else { return }
+        guard let result = finished else { return }
+        prepareResult = result
+        guard !isTerminating else {
+            activeRun = nil
+            phase = .empty
+            return
+        }
+        // 취소는 cancelPrepare가 화면을 정리한다. 실패면 준비 화면에 남아 "다시 시도"를 기다린다.
+        guard result.succeeded else { return }
+        await beginRunAfterPrepare(result)
+    }
+
+    /// 준비가 끝나면 실행 폴더를 만들고(qa-run 3단계) 로그를 옮긴 뒤 실행 루프로 넘어간다.
+    private func beginRunAfterPrepare(_ result: PrepareResult) async {
+        guard let workspace, let context = prepareContext, let project = selectedProject, let plan = selectedPlan else { return }
         do {
-            let runDir = try makeRunDirectory(workspace: workspace, project: project, plan: plan.url)
-            createdRunDir = runDir
-            let context = ActiveRun(
-                runDir: runDir,
-                project: project,
-                plan: plan,
-                scenarioIDs: approval.scenarioIDs
-            )
-            activeRun = context
-            let prompt = StagePrompt.prepare(
-                project: project,
-                plan: relativePath(plan.url, from: workspace.root),
-                runDir: relativePath(runDir, from: workspace.root),
-                deviceSerial: approval.deviceSerial,
-                server: approval.server,
-                scenarioIDs: approval.scenarioIDs,
-                buildInstall: approval.buildInstall,
-                screenshotApproved: approval.screenshotApproved
-            )
-            let succeeded = await runStage(.prepare, prompt: prompt)
-            // 준비 중에 앱 종료를 시작했으면 실행 루프(POST /api/run)를 시작하지 않는다.
-            guard succeeded, !isTerminating else {
-                activeRun = nil
-                Workspace.removeRunDirectoryIfEmpty(runDir)
-                return
-            }
-            guard preparationSucceeded(stageResultSummary) else {
-                activeRun = nil
-                Workspace.removeRunDirectoryIfEmpty(runDir)
-                phase = .reviewing
-                notice = AppNotice(
-                    title: "준비 실패",
-                    message: preparationMessage(in: stageResultSummary).map(redactStageText) ?? "실행 준비 결과를 확인해 주세요."
-                )
-                return
-            }
+            let runDir = try createRunDirectory(planned: context.plannedRunDir, workspace: workspace, project: project, plan: plan.url)
+            try? PrepareLog(url: context.input.logURL, secrets: []).move(toRunDir: runDir)
+            let activeContext = ActiveRun(runDir: runDir, project: project, plan: plan, scenarioIDs: context.approval.scenarioIDs)
+            activeRun = activeContext
             selectedRun = runDir
-            runDeviceSerial = approval.deviceSerial
-            runServer = approval.server
-            let scenarios = orderedScenarios.filter { approval.scenarioIDs.contains($0.id) }
+            let scenarios = context.input.scenarios
+            let roles = Workspace.accountRoles(projectYAML: (try? String(contentsOf: project.dir.appending(path: "project.yaml"), encoding: .utf8)) ?? "")
+            let loginPlan = LoginPlan.make(scenarios: scenarios, roles: roles, chosenRole: context.approval.loginRole)
+            var loginBefore: String?
+            if case .beforeScenario(let id) = loginPlan.when { loginBefore = id }
+            let config = context.input.config
+            let reset = config.package.flatMap { package in
+                config.launch.map { launch in
+                    ResetContext(
+                        package: package,
+                        launch: launch,
+                        permissions: config.permissions,
+                        loginScript: context.input.loginScript,
+                        envURL: project.dir.appending(path: ".env"),
+                        roles: roles,
+                        chosenRole: context.approval.loginRole,
+                        loginBefore: loginBefore,
+                        secrets: SecretKeys.values(
+                            envURL: project.dir.appending(path: ".env"),
+                            accountKeys: Set(Workspace.accountEnvKeys(projectYAML: (try? String(contentsOf: project.dir.appending(path: "project.yaml"), encoding: .utf8)) ?? ""))
+                        )
+                    )
+                }
+            }
             resetRunState(for: scenarios)
             displayedPastRun = nil
             let orchestrator = makeOrchestrator(
                 runDir: runDir,
                 plan: plan,
                 scenarios: scenarios,
-                deviceSerial: approval.deviceSerial,
-                server: approval.server
+                deviceSerial: context.approval.deviceSerial,
+                server: context.approval.server,
+                reset: reset,
+                prepare: result
             )
             runOrchestrator = orchestrator
-            runOrchestratorContext = context
+            runOrchestratorContext = activeContext
+            prepareCoordinator = nil
+            prepareContext = nil
             phase = .running(runDir: runDir)
             await consumeRun(
                 orchestrator,
@@ -561,7 +736,6 @@ final class AppModel {
                 runDir: runDir
             )
         } catch {
-            if let createdRunDir { Workspace.removeRunDirectoryIfEmpty(createdRunDir) }
             activeRun = nil
             phase = .reviewing
             show(error)
@@ -574,6 +748,9 @@ final class AppModel {
     }
 
     func stopAll() async {
+        if prepareCoordinator != nil, case .preparing = phase {
+            await cancelPrepare()
+        }
         await runOrchestrator?.stopAll()
         // "전체 중지…" 확인 창을 연 사이에 판정 단계로 넘어갔으면 판정도 사용자 중지로 끝낸다.
         if activeStage != nil { stageWasStopped = true }
@@ -583,10 +760,24 @@ final class AppModel {
     func stopAllForTermination() async {
         isTerminating = true
         await stopAll()
+        // 실행 중 초기화(pm clear·pm grant·로그인) 명령은 stopAll로 멈추지 않으니 Task를 취소해 끊는다.
+        runOperationTask?.cancel()
         while hasActiveExecution {
             try? await Task.sleep(for: .milliseconds(100))
         }
         claudeRunner?.cancel()
+        await terminateOwnedProcesses()
+    }
+
+    /// 앱이 띄운 Artemis·테스트 서버가 있는지(종료할 때 끝낼 것).
+    var hasOwnedProcesses: Bool { processLauncher.processes.contains { $0.isRunning } }
+
+    /// 앱이 띄운 Artemis·테스트 서버를 함께 끝낸다. 터미널에서 띄운 것은 건드리지 않는다.
+    func terminateOwnedProcesses() async {
+        for process in processLauncher.processes {
+            await process.terminate()
+            processLauncher.forget(process)
+        }
     }
 
     func keepWaiting(id: String) async {
@@ -948,7 +1139,7 @@ final class AppModel {
             switch activeStage {
             case .register: return [.register]
             case .plan: return [.plan]
-            case .prepare, .judge: return [.run]
+            case .judge: return [.run]
             }
         }
         if activeRun != nil { return [.run] }
@@ -985,7 +1176,6 @@ final class AppModel {
         switch activeStage {
         case .register: ongoing = [.register, .plan, .review, .run, .results]
         case .plan: ongoing = [.plan, .review, .run, .results]
-        case .prepare: ongoing = [.run, .results]
         // 판정 중에는 실행 루프가 끝났지만 결과 파일은 판정이 쓰므로 실행을 직접 체크한다.
         case .judge: steps.insert(.run); ongoing = [.results]
         case nil: ongoing = activeRun != nil ? [.run, .results] : []
@@ -1007,7 +1197,11 @@ final class AppModel {
         case .review:
             phase = .reviewing
         case .run:
-            if let activeStage, activeStage == .prepare || activeStage == .judge {
+            if case .preparing = phase {
+                return
+            } else if prepareCoordinator != nil, let activeRun {
+                phase = .preparing(runName: activeRun.runDir.lastPathComponent)
+            } else if let activeStage, activeStage == .judge {
                 phase = .stage(activeStage)
             } else if let activeRun {
                 phase = .running(runDir: activeRun.runDir)
@@ -1193,7 +1387,14 @@ final class AppModel {
         stageResultIsError = nil
         stageResultSummary = ""
         stageRawLog = ""
-        stageSecretValues = selectedProject.map { EnvFile(url: $0.dir.appending(path: ".env")).values() } ?? []
+        stageSecretValues = selectedProject.map { project in
+            let yaml = (try? String(
+                contentsOf: project.dir.appending(path: "project.yaml"),
+                encoding: .utf8
+            )) ?? ""
+            let accountKeys = Set(Workspace.accountEnvKeys(projectYAML: yaml))
+            return SecretKeys.values(envURL: project.dir.appending(path: ".env"), accountKeys: accountKeys)
+        } ?? []
         stageStartedAt = .now
         stageIsRunning = true
         // 앞 단계의 출력·비용을 비운 뒤에 첫 기록을 남긴다.
@@ -1273,7 +1474,9 @@ final class AppModel {
         plan: PlanDocument,
         scenarios: [Scenario],
         deviceSerial: String,
-        server: String
+        server: String,
+        reset: ResetContext? = nil,
+        prepare: PrepareResult? = nil
     ) -> RunOrchestrator {
         RunOrchestrator(
             api: ArtemisClient(base: URL(string: artemisURL) ?? URL(string: "http://127.0.0.1:8100")!),
@@ -1288,7 +1491,9 @@ final class AppModel {
             tracesDir: artemisTracesDir.isEmpty
                 ? nil
                 : URL(fileURLWithPath: expandedPath(artemisTracesDir)),
-            adbPath: resolvedADBPath()
+            adbPath: resolvedADBPath(),
+            reset: reset,
+            prepare: prepare
         )
     }
 
@@ -1298,8 +1503,18 @@ final class AppModel {
         runDir: URL
     ) async {
         // 실행 중에는 .env를 잠그므로 시작할 때 한 번 읽은 값을 끝까지 쓴다.
-        runSecretValues = activeRun.map { EnvFile(url: $0.project.dir.appending(path: ".env")).values() } ?? []
+        runSecretValues = activeRun.map { activeRun in
+            let project = activeRun.project
+            let yaml = (try? String(
+                contentsOf: project.dir.appending(path: "project.yaml"),
+                encoding: .utf8
+            )) ?? ""
+            let accountKeys = Set(Workspace.accountEnvKeys(projectYAML: yaml))
+            return SecretKeys.values(envURL: project.dir.appending(path: ".env"), accountKeys: accountKeys)
+        } ?? []
         let operationTask = Task { await operation() }
+        runOperationTask = operationTask
+        defer { runOperationTask = nil }
         for await event in orchestrator.events {
             handle(event)
             if case .finished = event { break }
@@ -1358,7 +1573,7 @@ final class AppModel {
         case .state(let id, let state):
             runStates[id] = state
             switch state {
-            case .running:
+            case .preparing, .running:
                 runStartedAt[id] = runStartedAt[id] ?? .now
             case .finished, .held, .notRun:
                 runFinishedAt[id] = .now
@@ -1603,6 +1818,26 @@ final class AppModel {
         return try workspace.plans(of: project).first
     }
 
+    /// 준비를 시작할 때 정하는 실행 폴더 경로(만들지 않는다).
+    private func plannedRunDirectory(project: ProjectRef, plan: URL) -> URL {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.timeZone = .current
+        formatter.dateFormat = "yyyy-MM-dd-HHmm"
+        return project.dir.appending(path: "runs")
+            .appending(path: plan.deletingPathExtension().lastPathComponent)
+            .appending(path: formatter.string(from: .now))
+    }
+
+    /// 정해 둔 경로가 그새 생겼으면 1분 뒤 이름으로 만든다.
+    private func createRunDirectory(planned: URL, workspace: Workspace, project: ProjectRef, plan: URL) throws -> URL {
+        guard FileManager.default.fileExists(atPath: planned.path) else {
+            try FileManager.default.createDirectory(at: planned, withIntermediateDirectories: true)
+            return planned
+        }
+        return try makeRunDirectory(workspace: workspace, project: project, plan: plan)
+    }
+
     private func makeRunDirectory(workspace: Workspace, project: ProjectRef, plan: URL) throws -> URL {
         let parent = project.dir
             .appending(path: "runs")
@@ -1627,28 +1862,18 @@ final class AppModel {
         return path.hasPrefix(rootPath) ? String(path.dropFirst(rootPath.count)) : path
     }
 
-    private func preparationSucceeded(_ summary: String) -> Bool {
-        summary.components(separatedBy: .newlines)
-            .last(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty })?
-            .trimmingCharacters(in: .whitespaces) == "준비 완료"
-    }
-
     /// Claude Code에서 온 글을 화면에 보이기 전에 프로젝트 .env 값을 가린다.
     private func redactStageText(_ text: String) -> String {
         SecretRedactor.redact(text, values: stageSecretValues)
-    }
-
-    private func preparationMessage(in summary: String) -> String? {
-        summary.components(separatedBy: .newlines)
-            .reversed()
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .first { $0.hasPrefix("준비 실패:") || $0.hasPrefix("결정 필요:") }
     }
 
     private func resolvedClaudeURL() -> URL {
         let path = claudePath.isEmpty ? "~/.local/bin/claude" : claudePath
         return URL(fileURLWithPath: expandedPath(path))
     }
+
+    /// 승인 시트가 에뮬레이터 이름을 읽을 때 쓰는 adb.
+    var adbExecutable: String? { resolvedADBPath() }
 
     private func resolvedADBPath() -> String? {
         let candidates = adbPath.isEmpty
