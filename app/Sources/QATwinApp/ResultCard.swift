@@ -185,7 +185,7 @@ struct ResultCard: View {
         let included = appModel.reviewEntry(for: result).include
         return VStack(alignment: .leading, spacing: 8) {
             HStack {
-                Text(included ? "md에 들어갈 내용" : "md에 들어갈 내용 — 체크를 꺼서 지금은 빠져요")
+                Text(included ? "md에 들어갈 내용" : "md에 들어갈 내용 — 체크가 꺼져 있어 지금은 빠져요")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color.qaSecondaryText)
                 Spacer()
@@ -203,7 +203,7 @@ struct ResultCard: View {
                     .padding(10)
             }
             // 이상적 높이를 고정해야 내용이 길어져도 ViewThatFits가 스크롤 쪽으로 바뀌지 않는다.
-            .frame(minHeight: 120, idealHeight: 120, maxHeight: fillsHeight ? .infinity : 220)
+            .frame(minHeight: 120, idealHeight: 120, maxHeight: fillsHeight ? .infinity : 120)
             .background(Color.qaSunken, in: RoundedRectangle(cornerRadius: 6))
             .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.qaLine))
             .opacity(included ? 1 : 0.5)
