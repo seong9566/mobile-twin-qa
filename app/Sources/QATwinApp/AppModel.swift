@@ -703,7 +703,11 @@ final class AppModel {
                         envURL: project.dir.appending(path: ".env"),
                         roles: roles,
                         chosenRole: context.approval.loginRole,
-                        loginBefore: loginBefore
+                        loginBefore: loginBefore,
+                        secrets: SecretKeys.values(
+                            envURL: project.dir.appending(path: ".env"),
+                            accountKeys: Set(Workspace.accountEnvKeys(projectYAML: (try? String(contentsOf: project.dir.appending(path: "project.yaml"), encoding: .utf8)) ?? ""))
+                        )
                     )
                 }
             }

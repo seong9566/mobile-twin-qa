@@ -217,6 +217,27 @@ import Testing
         #expect(commands.contains { $0.contains("git -C '\(fixture.input.sourceDir.path)' diff | shasum") })
     }
 
+    @Test func prepareFailureTextIsRedacted() async throws {
+        let fixture = try makeFixture(login: true)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let coordinator = PrepareCoordinator(
+            input: fixture.input,
+            api: FakeArtemisAPI(),
+            shell: readyShell(extra: [("android-login.sh", 5, "비밀번호 top-secret 이(가) 틀렸어요")]),
+            health: FakeHealth(responses: []),
+            launcher: FakeLauncher(),
+            pollInterval: .milliseconds(10)
+        )
+
+        async let collected = collect(coordinator.events)
+        await coordinator.run()
+        let events = await collected
+
+        #expect(events.contains(.item(.login, .failed("비밀번호 **** 이(가) 틀렸어요"))))
+        #expect(finishedResult(events)?.failure == "비밀번호 **** 이(가) 틀렸어요")
+        #expect(!String(describing: events).contains("top-secret"))
+    }
+
     @Test func prepareLogRedactsSecrets() async throws {
         let fixture = try makeFixture(login: true)
         defer { try? FileManager.default.removeItem(at: fixture.root) }

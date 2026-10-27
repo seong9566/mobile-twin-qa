@@ -162,6 +162,8 @@ public actor PrepareCoordinator {
     private let log: PrepareLog
     private let pollInterval: Duration
     private let shell: ShellRunner
+    /// 화면·로그·결과에 보이기 전에 가릴 .env 값(스펙 5.2 기준). 시작할 때 한 번 읽는다.
+    private let secrets: [String]
 
     private var activeProcess: ManagedProcess?
     private var artemisProcess: ManagedProcess?
@@ -198,6 +200,7 @@ public actor PrepareCoordinator {
         self.log = PrepareLog(url: input.logURL, secrets: secrets)
         self.pollInterval = pollInterval
         self.shell = shell
+        self.secrets = secrets
         self.result = PrepareResult(
             artemisStartedByApp: false,
             serverStartedByApp: false,
@@ -820,14 +823,36 @@ public actor PrepareCoordinator {
         }
     }
 
+    /// 항목 상세·실패 문구·로그는 모두 명령 출력에서 오므로 가린 뒤에 내보낸다.
     private func emit(_ event: PrepareEvent) {
-        continuation.yield(event)
+        continuation.yield(redacted(event))
+    }
+
+    private func redacted(_ event: PrepareEvent) -> PrepareEvent {
+        func mask(_ text: String) -> String { SecretRedactor.redact(text, values: secrets) }
+        switch event {
+        case .item(let step, let state):
+            let masked: PrepareItemState = switch state {
+            case .waiting, .running: state
+            case .done(let text): .done(mask(text))
+            case .skipped(let text): .skipped(mask(text))
+            case .waitingForHuman(let text): .waitingForHuman(mask(text))
+            case .failed(let text): .failed(mask(text))
+            }
+            return .item(step, masked)
+        case .log(let text):
+            return .log(mask(text))
+        case .finished(var result):
+            result.failure = result.failure.map(mask)
+            result.skipReason = result.skipReason.map(mask)
+            return .finished(result)
+        }
     }
 
     private func appendLog(_ step: PrepareStep, _ text: String) {
         guard !text.isEmpty else { return }
         log.append(step: step, text)
-        emit(.log(SecretRedactor.redact(text, values: Self.secretValues(input: input))))
+        emit(.log(text))
     }
 
     private func finish(succeeded: Bool, failure: String?) {

@@ -51,6 +51,17 @@ import Testing
         #expect(states.last == .held(reason: "초기화 실패: 로그인 화면을 찾지 못했어요 — 권한 요청 창이나 온보딩이 가리고 있을 수 있어요"))
     }
 
+    @Test func resetFailureReasonIsRedacted() async throws {
+        let (plan, scenario, directory) = try fixture(resets: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let api = api(for: [scenario])
+        let shell = RecordingShell(responses: [("android-login.sh", 5, "pw-secret-9 가 틀렸어요")])
+
+        let states = try await run(api: api, shell: shell, plan: plan, scenarios: [scenario], directory: directory, loginBefore: nil, secrets: ["pw-secret-9"])
+
+        #expect(states.last == .held(reason: "초기화 실패: **** 가 틀렸어요"))
+    }
+
     @Test func loginBeforeWithoutResetSkipsClear() async throws {
         let (plan, scenario, directory) = try fixture(resets: false)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -102,7 +113,8 @@ import Testing
         plan: PlanDocument,
         scenarios: [Scenario],
         directory: URL,
-        loginBefore: String?
+        loginBefore: String?,
+        secrets: [String] = []
     ) async throws -> [ScenarioRunState] {
         let reset = ResetContext(
             package: "com.demo",
@@ -112,7 +124,8 @@ import Testing
             envURL: directory.appending(path: ".env"),
             roles: ["user": AccountRole(idEnv: "DEMO_USER_ID", passwordEnv: "DEMO_USER_PASSWORD")],
             chosenRole: "user",
-            loginBefore: loginBefore
+            loginBefore: loginBefore,
+            secrets: secrets
         )
         let orchestrator = RunOrchestrator(
             api: api,

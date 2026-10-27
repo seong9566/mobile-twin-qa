@@ -50,6 +50,8 @@ public struct ResetContext: Sendable {
     public let chosenRole: String?
     /// LoginPlan.when이 .beforeScenario(id)면 그 id. 초기화 칸이 없어도 그 시나리오 앞에서 로그인한다.
     public let loginBefore: String?
+    /// 초기화 실패 사유를 run-state·화면에 남기기 전에 가릴 .env 값.
+    public let secrets: [String]
 
     public init(
         package: String,
@@ -59,7 +61,8 @@ public struct ResetContext: Sendable {
         envURL: URL,
         roles: [String: AccountRole],
         chosenRole: String?,
-        loginBefore: String?
+        loginBefore: String?,
+        secrets: [String] = []
     ) {
         self.package = package
         self.launch = launch
@@ -69,6 +72,7 @@ public struct ResetContext: Sendable {
         self.roles = roles
         self.chosenRole = chosenRole
         self.loginBefore = loginBefore
+        self.secrets = secrets
     }
 }
 
@@ -279,7 +283,8 @@ public actor RunOrchestrator {
         }
 
         if let failure = await resetIfNeeded(scenario) {
-            setState(.held(reason: "초기화 실패: \(failure)"), for: scenario.id)
+            let reason = SecretRedactor.redact(failure, values: reset?.secrets ?? [])
+            setState(.held(reason: "초기화 실패: \(reason)"), for: scenario.id)
             currentID = nil
             return .continued
         }
