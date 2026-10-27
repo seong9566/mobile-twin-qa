@@ -37,8 +37,12 @@ public struct ProcessShellRunner: ShellRunner {
         process.standardError = pipe
         process.standardOutput = pipe
 
-        return try await withCheckedThrowingContinuation { continuation in
+        // Task가 취소되면(준비 취소·앱 종료) 자식 프로세스 그룹을 끝내고 CancellationError로 돌아간다.
+        let holder = ShellStateHolder()
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
             let state = ShellRunState(continuation: continuation)
+            holder.set(state)
             process.terminationHandler = { terminated in
                 state.exited(status: terminated.terminationStatus)
             }
@@ -77,7 +81,35 @@ public struct ProcessShellRunner: ShellRunner {
                 guard state.timeOut() else { return }
                 terminateGroup(of: process)
             }
+            if Task.isCancelled, holder.cancel() {
+                terminateGroup(of: process)
+            }
+            }
+        } onCancel: {
+            if holder.cancel() {
+                terminateGroup(of: process)
+            }
         }
+    }
+}
+
+/// 취소 처리기와 실행 쪽이 같은 상태를 보게 한다. 시작 전에 취소되면 시작한 뒤 바로 끝낸다.
+private final class ShellStateHolder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var state: ShellRunState?
+    private var cancelled = false
+
+    func set(_ state: ShellRunState) {
+        lock.withLock { self.state = state }
+    }
+
+    /// 아직 끝나지 않은 실행을 취소로 끝냈으면 true(호출자가 프로세스를 끝낸다).
+    func cancel() -> Bool {
+        let state: ShellRunState? = lock.withLock {
+            cancelled = true
+            return self.state
+        }
+        return state?.cancel() ?? false
     }
 }
 
@@ -122,6 +154,13 @@ private final class ShellRunState: @unchecked Sendable {
 
     func fail(_ error: Error) {
         lock.withLock { takeContinuation() }?.resume(throwing: error)
+    }
+
+    /// 아직 끝나지 않았으면 취소로 끝내고 true를 돌려준다.
+    func cancel() -> Bool {
+        guard let continuation = lock.withLock({ takeContinuation() }) else { return false }
+        continuation.resume(throwing: CancellationError())
+        return true
     }
 
     /// 아직 끝나지 않았으면 시간 초과로 끝내고 true를 돌려준다.

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 public protocol HealthChecker: Sendable {
@@ -22,6 +23,43 @@ public struct URLSessionHealthChecker: HealthChecker {
 
 public protocol ProcessLauncher: Sendable {
     func launch(exe: String, args: [String], cwd: URL, logURL: URL?) throws -> ManagedProcess
+}
+
+/// 띄운 프로세스를 모두 기억하는 런처. 앱이 하나를 두고 승인 시트와 준비 조정자가 함께 쓴다.
+/// 띄우는 순간부터 기록되므로 응답을 기다리는 사이에 앱을 끝내도 함께 끝낼 수 있다(스펙 5.3).
+public final class TrackingProcessLauncher: ProcessLauncher, @unchecked Sendable {
+    private let lock = NSLock()
+    private var launched: [ManagedProcess] = []
+    private var commands: [ObjectIdentifier: String] = [:]
+
+    public init() {}
+
+    public func launch(exe: String, args: [String], cwd: URL, logURL: URL?) throws -> ManagedProcess {
+        let process = try DefaultProcessLauncher().launch(exe: exe, args: args, cwd: cwd, logURL: logURL)
+        lock.withLock {
+            launched.append(process)
+            commands[ObjectIdentifier(process)] = ([exe] + args).joined(separator: " ")
+        }
+        return process
+    }
+
+    public var processes: [ManagedProcess] {
+        lock.withLock { launched }
+    }
+
+    /// 명령에 그 글자가 든, 아직 살아 있는 프로세스.
+    public func running(matching text: String) -> ManagedProcess? {
+        lock.withLock {
+            launched.first { $0.isRunning && (commands[ObjectIdentifier($0)]?.contains(text) ?? false) }
+        }
+    }
+
+    public func forget(_ process: ManagedProcess) {
+        lock.withLock {
+            launched.removeAll { $0 === process }
+            commands[ObjectIdentifier(process)] = nil
+        }
+    }
 }
 
 public struct DefaultProcessLauncher: ProcessLauncher {
@@ -166,6 +204,8 @@ public actor PrepareCoordinator {
     private let secrets: [String]
 
     private var activeProcess: ManagedProcess?
+    /// 지금 도는 셸 명령(install·로그인·pm·git). 취소하면 그 프로세스 그룹을 끝낸다.
+    private var activeShellTask: Task<(status: Int32, out: String), Error>?
     private var artemisProcess: ManagedProcess?
     private var cachedMacIP: String?
     private var sourceDirty = false
@@ -235,6 +275,7 @@ public actor PrepareCoordinator {
     public func cancel() async {
         cancelled = true
         sleepTask?.cancel()
+        activeShellTask?.cancel()
         if let activeProcess {
             await activeProcess.terminate()
             self.activeProcess = nil
@@ -264,13 +305,18 @@ public actor PrepareCoordinator {
 
         do {
             _ = try await api.devices()
-            items[.artemis] = .done("응답해요")
+            // 이 앱이 띄운 Artemis가 응답하는 것이면 그렇게 보인다(준비 기록의 artemisStartedByApp와 맞춘다).
+            items[.artemis] = (launcher as? TrackingProcessLauncher)?.running(matching: "artemis ui") != nil
+                ? .done("꺼져 있어서 띄웠어요 · 응답해요")
+                : .done("응답해요")
         } catch {
             if isLoopback(input.artemisURL) {
                 do {
-                    artemis = try launchArtemis(input: input, launcher: launcher)
+                    // 앞서 띄운 Artemis가 아직 뜨는 중이면 다시 띄우지 않고 응답만 기다린다.
+                    let alreadyLaunched = (launcher as? TrackingProcessLauncher)?.running(matching: "artemis ui")
+                    artemis = try alreadyLaunched ?? launchArtemis(input: input, launcher: launcher)
                     let deadline = Date().addingTimeInterval(60)
-                    while Date() < deadline {
+                    while Date() < deadline, !Task.isCancelled {
                         if (try? await api.devices()) != nil {
                             items[.artemis] = .done("꺼져 있어서 띄웠어요 · 응답해요")
                             break
@@ -391,6 +437,12 @@ public actor PrepareCoordinator {
             throw PrepareFailure(.artemis, "다른 기기의 Artemis라 띄울 수 없어요")
         }
 
+        // 승인 시트가 띄워 아직 뜨는 중인 Artemis가 있으면 그것을 기다린다.
+        if artemisProcess?.isRunning != true,
+           let starting = (launcher as? TrackingProcessLauncher)?.running(matching: "artemis ui") {
+            artemisProcess = starting
+            result.artemisStartedByApp = true
+        }
         if artemisProcess?.isRunning != true {
             do {
                 let process = try Self.launchArtemis(input: input, launcher: launcher)
@@ -747,24 +799,22 @@ public actor PrepareCoordinator {
         return address
     }
 
+    /// 빌드 전후 비교용. 로그인 셸을 거치지 않아 rc 출력이 섞이지 않고, git이 실패하면 그대로 실패한다.
     private func gitSnapshot() async throws -> GitSnapshot {
-        async let status = gitOutput(["status", "--porcelain"])
-        let arguments = LoginShell.arguments("git -C \(shellQuote(input.sourceDir.path)) diff | shasum", exports: [])
-        async let diff = shell.run(arguments.exe, arguments.args, timeout: .seconds(20))
-        let statusOutput = try await status
-        let diffOutput = try await diff
-        guard diffOutput.status == 0 else {
-            throw PrepareFailure(.build, lastMessage(diffOutput.out, fallback: "git diff를 확인하지 못했어요"))
-        }
-        return GitSnapshot(status: statusOutput, diffSHA: diffOutput.out)
+        let status = try await gitOutput(["status", "--porcelain"])
+        let diff = try await gitOutput(["diff"], logOutput: false)
+        let digest = SHA256.hash(data: Data(diff.utf8)).map { String(format: "%02x", $0) }.joined()
+        appendLog(.build, "git diff sha256 \(digest.prefix(12))")
+        return GitSnapshot(status: status, diffSHA: digest)
     }
 
-    private func gitOutput(_ arguments: [String]) async throws -> String {
+    private func gitOutput(_ arguments: [String], logOutput: Bool = true) async throws -> String {
         let response = try await runShell(
             step: .build,
             exe: "/usr/bin/git",
             args: ["-C", input.sourceDir.path] + arguments,
-            timeout: .seconds(20)
+            timeout: .seconds(20),
+            logOutput: logOutput
         )
         guard response.status == 0 else {
             throw PrepareFailure(.build, lastMessage(response.out, fallback: "git 상태를 확인하지 못했어요"))
@@ -776,13 +826,18 @@ public actor PrepareCoordinator {
         step: PrepareStep,
         exe: String,
         args: [String],
-        timeout: Duration
+        timeout: Duration,
+        logOutput: Bool = true
     ) async throws -> (status: Int32, out: String) {
         try checkCancellation()
         appendLog(step, ([exe] + args).joined(separator: " "))
         do {
-            let response = try await shell.run(exe, args, timeout: timeout)
-            appendLog(step, response.out)
+            let shell = self.shell
+            let task = Task { try await shell.run(exe, args, timeout: timeout) }
+            activeShellTask = task
+            defer { activeShellTask = nil }
+            let response = try await task.value
+            if logOutput { appendLog(step, response.out) }
             try checkCancellation()
             return response
         } catch {

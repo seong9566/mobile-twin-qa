@@ -156,8 +156,8 @@ final class AppModel {
     @ObservationIgnored private var runOrchestrator: RunOrchestrator?
     @ObservationIgnored private var prepareCoordinator: PrepareCoordinator?
     @ObservationIgnored private var prepareContext: (input: PrepareInput, approval: Approval, plannedRunDir: URL)?
-    /// 앱이 띄운 Artemis·테스트 서버. 앱이 끝날 때 함께 끝낸다.
-    @ObservationIgnored private var ownedProcesses: [ManagedProcess] = []
+    /// 앱이 띄운 Artemis·테스트 서버를 띄우는 순간부터 기억한다. 앱이 끝날 때 함께 끝낸다.
+    @ObservationIgnored private let processLauncher = TrackingProcessLauncher()
     @ObservationIgnored private var lockNotified = false
     @ObservationIgnored private var runOrchestratorContext: ActiveRun?
     @ObservationIgnored private var stageResultIsError: Bool?
@@ -533,7 +533,7 @@ final class AppModel {
             api: ArtemisClient(base: URL(string: artemisURL) ?? URL(string: "http://127.0.0.1:8100")!),
             shell: ProcessShellRunner(),
             health: URLSessionHealthChecker(),
-            launcher: DefaultProcessLauncher()
+            launcher: processLauncher
         )
         prepareCoordinator = coordinator
         prepareContext = (input, approval, plannedRunDir)
@@ -557,10 +557,10 @@ final class AppModel {
 
     /// 준비 화면의 "목록으로"·"준비 취소". 실행 폴더는 만들지 않았으므로 지울 것이 없다.
     func cancelPrepare() async {
-        if let coordinator = prepareCoordinator, prepareResult == nil {
+        // 결과가 이미 왔어도(실패 뒤 "목록으로") 취소는 해 둔다. 끝난 코디네이터에는 영향이 없다.
+        if let coordinator = prepareCoordinator {
             await coordinator.cancel()
         }
-        await keepOwnedProcesses()
         prepareCoordinator = nil
         prepareContext = nil
         activeRun = nil
@@ -590,9 +590,8 @@ final class AppModel {
             api: ArtemisClient(base: URL(string: artemisURL) ?? URL(string: "http://127.0.0.1:8100")!),
             shell: ProcessShellRunner(),
             health: URLSessionHealthChecker(),
-            launcher: DefaultProcessLauncher()
+            launcher: processLauncher
         )
-        if let artemis = result.artemis { ownedProcesses.append(artemis) }
         return result.items
     }
 
@@ -642,6 +641,11 @@ final class AppModel {
         let operationTask = Task { await operation() }
         var finished: PrepareResult?
         for await event in coordinator.events {
+            // 취소한 뒤 새 준비를 시작했으면 이전 준비의 이벤트는 버린다.
+            guard prepareCoordinator === coordinator else {
+                if case .finished = event { break }
+                continue
+            }
             switch event {
             case .item(let step, let state):
                 prepareItems[step] = state
@@ -658,7 +662,7 @@ final class AppModel {
             if finished != nil { break }
         }
         await operationTask.value
-        await keepOwnedProcesses()
+        guard prepareCoordinator === coordinator else { return }
         guard let result = finished else { return }
         prepareResult = result
         guard !isTerminating else {
@@ -669,13 +673,6 @@ final class AppModel {
         // 취소는 cancelPrepare가 화면을 정리한다. 실패면 준비 화면에 남아 "다시 시도"를 기다린다.
         guard result.succeeded else { return }
         await beginRunAfterPrepare(result)
-    }
-
-    private func keepOwnedProcesses() async {
-        guard let coordinator = prepareCoordinator else { return }
-        for process in await coordinator.ownedProcesses() where !ownedProcesses.contains(where: { $0 === process }) {
-            ownedProcesses.append(process)
-        }
     }
 
     /// 준비가 끝나면 실행 폴더를 만들고(qa-run 3단계) 로그를 옮긴 뒤 실행 루프로 넘어간다.
@@ -768,13 +765,14 @@ final class AppModel {
     }
 
     /// 앱이 띄운 Artemis·테스트 서버가 있는지(종료할 때 끝낼 것).
-    var hasOwnedProcesses: Bool { ownedProcesses.contains { $0.isRunning } }
+    var hasOwnedProcesses: Bool { processLauncher.processes.contains { $0.isRunning } }
 
     /// 앱이 띄운 Artemis·테스트 서버를 함께 끝낸다. 터미널에서 띄운 것은 건드리지 않는다.
     func terminateOwnedProcesses() async {
-        await keepOwnedProcesses()
-        for process in ownedProcesses { await process.terminate() }
-        ownedProcesses = []
+        for process in processLauncher.processes {
+            await process.terminate()
+            processLauncher.forget(process)
+        }
     }
 
     func keepWaiting(id: String) async {

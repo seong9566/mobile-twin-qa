@@ -63,3 +63,23 @@ import Testing
         return condition()
     }
 }
+
+@Test func trackingLauncherFindsRunningProcessByCommand() async throws {
+    let launcher = TrackingProcessLauncher()
+    let process = try launcher.launch(
+        exe: "/bin/sh",
+        args: ["-c", "sleep 5 # uv run artemis ui --port 8100"],
+        cwd: FileManager.default.temporaryDirectory,
+        logURL: nil
+    )
+
+    #expect(launcher.running(matching: "artemis ui") === process)
+    #expect(launcher.running(matching: "server/run.sh") == nil)
+    #expect(launcher.processes.count == 1)
+
+    await process.terminate()
+    try await Task.sleep(for: .milliseconds(200))
+    #expect(launcher.running(matching: "artemis ui") == nil)
+    launcher.forget(process)
+    #expect(launcher.processes.isEmpty)
+}

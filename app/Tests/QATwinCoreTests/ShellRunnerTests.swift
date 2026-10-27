@@ -27,3 +27,18 @@ import Testing
     #expect(result.out == "hi\n")
     #expect(Date().timeIntervalSince(startedAt) < 2)
 }
+
+@Test func shellRunnerCancelKillsProcessGroup() async throws {
+    let marker = FileManager.default.temporaryDirectory.appending(path: "shell-cancel-\(UUID().uuidString)")
+    // 2초 뒤 파일을 만드는 자식. 취소로 그룹이 끝나면 파일이 생기지 않는다.
+    let task = Task {
+        try await ProcessShellRunner().run("/bin/sh", ["-c", "sleep 2 && touch '\(marker.path)'"], timeout: .seconds(20))
+    }
+    try await Task.sleep(for: .milliseconds(300))
+    task.cancel()
+    let started = Date()
+    await #expect(throws: CancellationError.self) { try await task.value }
+    #expect(Date().timeIntervalSince(started) < 1.5)
+    try await Task.sleep(for: .seconds(2.5))
+    #expect(!FileManager.default.fileExists(atPath: marker.path))
+}

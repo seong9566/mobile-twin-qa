@@ -214,7 +214,8 @@ import Testing
         _ = await collected
 
         let commands = shell.calls.map { ([$0.exe] + $0.args).joined(separator: " ") }
-        #expect(commands.contains { $0.contains("git -C '\(fixture.input.sourceDir.path)' diff | shasum") })
+        #expect(commands.contains("/usr/bin/git -C \(fixture.input.sourceDir.path) diff"))
+        #expect(!commands.contains { $0.contains("shasum") })
     }
 
     @Test func prepareFailureTextIsRedacted() async throws {
@@ -421,7 +422,7 @@ private func readyShell(
     RecordingShell(responses: extra + [
         ("rev-parse HEAD", 0, "source123\n"),
         ("status --porcelain", 0, ""),
-        ("diff | shasum", 0, "same\n"),
+        (" diff", 0, "same diff\n"),
         ("get-state", 0, "device\n"),
     ] + windowResponses.map { ("dumpsys window", 0, $0) } + [
         ("cmd wifi status", 0, "Wifi is enabled\nWifi is connected"),
