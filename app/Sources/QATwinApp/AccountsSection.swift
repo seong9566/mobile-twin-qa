@@ -64,12 +64,22 @@ struct AccountsSection: View {
             } else {
                 SecureField(presentKeys.contains(key) ? "새 값" : "값을 넣어 주세요", text: draftBinding(key))
                     .textFieldStyle(.roundedBorder)
+                if isTooShortToRedact(drafts[key, default: ""]) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .foregroundStyle(Color.qaWarn)
+                        .help("\(SecretRedactor.minimumLength)글자보다 짧은 값은 로그·화면에서 가려지지 않아요")
+                        .accessibilityLabel("짧은 값은 가려지지 않음")
+                }
                 Button("저장") { save(key) }
                     .disabled(drafts[key, default: ""].isEmpty)
             }
         }
         .padding(.horizontal, 12)
         .frame(minHeight: 38)
+    }
+
+    private func isTooShortToRedact(_ value: String) -> Bool {
+        !value.isEmpty && value.count < SecretRedactor.minimumLength
     }
 
     private func draftBinding(_ key: String) -> Binding<String> {

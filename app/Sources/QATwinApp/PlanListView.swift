@@ -15,7 +15,8 @@ struct PlanListView: View {
                             .font(.system(size: 12))
                             .foregroundStyle(Color.qaSecondaryText)
                         Spacer(minLength: 8)
-                        Toggle(isOn: allIncludedBinding) {
+                        // 일부만 넣었으면 부분 선택(–)으로 보이고, 누르면 모두 넣는다.
+                        Toggle(sources: appModel.automaticScenarios.map { includedBinding($0.id) }, isOn: \.self) {
                             Text("전체 선택 \(includedCount)/\(appModel.automaticScenarios.count)")
                                 .font(.system(size: 12))
                         }
@@ -130,20 +131,6 @@ struct PlanListView: View {
 
     private var includedCount: Int {
         appModel.automaticScenarios.count { appModel.includedScenarioIDs.contains($0.id) }
-    }
-
-    private var allIncludedBinding: Binding<Bool> {
-        Binding(
-            get: { !appModel.automaticScenarios.isEmpty && includedCount == appModel.automaticScenarios.count },
-            set: { includeAll in
-                let ids = appModel.automaticScenarios.map(\.id)
-                if includeAll {
-                    appModel.includedScenarioIDs.formUnion(ids)
-                } else {
-                    appModel.includedScenarioIDs.subtract(ids)
-                }
-            }
-        )
     }
 
     private func includedBinding(_ id: String) -> Binding<Bool> {

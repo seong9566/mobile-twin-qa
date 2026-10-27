@@ -8,16 +8,19 @@ struct ResultCard: View {
     let result: ScenarioResult
     let runDir: URL
 
+    /// 녹화의 가로/세로 비율. 영상 크기를 읽기 전에는 Android 폰 비율로 둔다.
+    @State private var videoAspect = Self.phoneAspect
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             header
             rawValues
             GeometryReader { proxy in
-                // 영상은 남는 높이에 맞춰 폰 화면 비율(1080×2400)로 정한다. 창이 낮으면 그만큼 작아진다.
+                // 영상은 남는 높이에 맞춰 녹화 비율로 정한다. 창이 낮으면 그만큼 작아진다.
                 let videoHeight = max(proxy.size.height - Self.captionHeight, 0)
-                let videoWidth = min(videoHeight * Self.phoneAspect, proxy.size.width * 0.45)
+                let videoWidth = min(videoHeight * videoAspect, proxy.size.width * 0.45)
                 HStack(alignment: .top, spacing: 22) {
-                    video(width: videoWidth, height: videoWidth / Self.phoneAspect)
+                    video(width: videoWidth, height: videoWidth / videoAspect)
                     // 공간이 넉넉하면 메모 칸이 남는 높이를 채우고, 모자라면 오른쪽 칸만 스크롤한다.
                     ViewThatFits(in: .vertical) {
                         detailColumn(fillsHeight: true)
@@ -33,6 +36,22 @@ struct ResultCard: View {
         .padding(.vertical, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.qaBackground)
+        .task(id: result.id) {
+            videoAspect = Self.phoneAspect
+            if let url = Artifacts.video(runDir: runDir, id: result.id), let aspect = await Self.aspect(of: url) {
+                videoAspect = aspect
+            }
+        }
+    }
+
+    /// 회전 정보를 반영한 녹화의 가로/세로 비율(iOS 녹화는 Android와 비율이 다르다).
+    private static func aspect(of url: URL) async -> CGFloat? {
+        guard let track = try? await AVURLAsset(url: url).loadTracks(withMediaType: .video).first,
+              let (size, transform) = try? await track.load(.naturalSize, .preferredTransform)
+        else { return nil }
+        let shown = size.applying(transform)
+        guard shown.width != 0, shown.height != 0 else { return nil }
+        return abs(shown.width) / abs(shown.height)
     }
 
     private func detailColumn(fillsHeight: Bool) -> some View {
@@ -52,6 +71,7 @@ struct ResultCard: View {
         .frame(maxWidth: .infinity, maxHeight: fillsHeight ? .infinity : nil, alignment: .topLeading)
     }
 
+    /// Android 폰 화면 비율(1080×2400).
     private static let phoneAspect: CGFloat = 1080.0 / 2400.0
     /// 영상 아래 경로 캡션: 간격 6 + 11pt 한 줄 ≈ 20, 여유를 둬 26.
     private static let captionHeight: CGFloat = 26
