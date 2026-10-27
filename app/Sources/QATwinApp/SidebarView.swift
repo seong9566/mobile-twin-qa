@@ -57,7 +57,7 @@ struct SidebarView: View {
         ForEach(appModel.projects.filter { $0.category == category }) { project in
             HStack(spacing: 2) {
                 Button {
-                    appModel.selectProject(project)
+                    appModel.requestSelectProject(project)
                 } label: {
                     Label(project.name, systemImage: "folder")
                         .fontWeight(appModel.selectedProject?.id == project.id ? .semibold : .regular)
@@ -120,11 +120,7 @@ struct SidebarView: View {
 
     private func planRow(_ plan: URL, project: ProjectRef) -> some View {
         Button {
-            do {
-                try appModel.selectPlan(at: plan)
-            } catch {
-                appModel.notice = AppNotice(title: "계획을 열지 못했어요", message: error.localizedDescription)
-            }
+            appModel.requestSelectPlan(at: plan)
         } label: {
             HStack(spacing: 7) {
                 Image(systemName: "doc")
@@ -192,7 +188,7 @@ struct SidebarView: View {
     }
 
     private func dateLabel(_ filename: String) -> String {
-        filename.count >= 10 ? String(filename.prefix(10)) : filename
+        PlanFileName.label(filename)
     }
 
     private func runLabel(_ filename: String) -> String {

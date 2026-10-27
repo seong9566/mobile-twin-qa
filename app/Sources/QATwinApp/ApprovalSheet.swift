@@ -108,6 +108,8 @@ struct ApprovalSheet: View {
                     if devices.isEmpty {
                         Text(deviceError ?? "기기 없음 — USB 연결과 잠금 해제를 확인하세요")
                             .foregroundStyle(Color.qaTertiaryText)
+                        Button("다시 확인") { Task { await loadDevices() } }
+                            .controlSize(.small)
                     } else {
                         Picker("기기", selection: $deviceSerial) {
                             ForEach(devices, id: \.serial) { device in
@@ -251,11 +253,31 @@ struct ApprovalSheet: View {
             unavailableDeviceCount = choices.unavailableCount
             deviceSerial = devices.first?.serial ?? ""
             deviceError = nil
+        } catch ArtemisError.unreachable {
+            devices = []
+            busyDeviceCount = 0
+            unavailableDeviceCount = 0
+            deviceError = "Artemis 서버에 연결하지 못했어요 (\(appModel.artemisURL)) — 설정의 주소를 확인하거나 서버를 띄워 주세요"
+        } catch ArtemisError.http(let code) {
+            devices = []
+            busyDeviceCount = 0
+            unavailableDeviceCount = 0
+            deviceError = "기기 목록을 읽지 못했어요 — Artemis 오류 \(code)"
+        } catch ArtemisError.badResponse {
+            devices = []
+            busyDeviceCount = 0
+            unavailableDeviceCount = 0
+            deviceError = "기기 목록을 읽지 못했어요 — Artemis 오류 응답"
+        } catch ArtemisError.deviceLocked {
+            devices = []
+            busyDeviceCount = 0
+            unavailableDeviceCount = 0
+            deviceError = "기기 목록을 읽지 못했어요 — 폰 잠김(409)"
         } catch {
             devices = []
             busyDeviceCount = 0
             unavailableDeviceCount = 0
-            deviceError = "기기 없음 — USB 연결과 잠금 해제를 확인하세요"
+            deviceError = "기기 목록을 읽지 못했어요 — \(error.localizedDescription)"
         }
     }
 

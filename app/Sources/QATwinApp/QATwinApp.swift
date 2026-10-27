@@ -51,6 +51,17 @@ struct QATwinApp: App {
                 Text("Claude Code를 멈춰요. 쓰다 만 파일이 남았으면 확인해 주세요.")
             }
             .confirmationDialog(
+                "저장하지 않은 수정 \(appModel.editedScenarioIDs.count)개가 있어요",
+                isPresented: $appModel.isUnsavedEditsConfirmationPresented,
+                titleVisibility: .visible
+            ) {
+                Button("저장하고 이동") { appModel.saveEditsThenNavigate() }
+                Button("버리고 이동", role: .destructive) { appModel.discardEditsThenNavigate() }
+                Button("취소", role: .cancel) { appModel.cancelNavigation() }
+            } message: {
+                Text("이동하면 목록 확인에서 고친 goal·통과 조건이 사라져요.")
+            }
+            .confirmationDialog(
                 "전체 실행을 중지할까요?",
                 isPresented: $isStopConfirmationPresented,
                 titleVisibility: .visible
@@ -85,7 +96,7 @@ struct QATwinApp: App {
                 Text("사이드바에서 계획을 열거나 앱 소스 폴더를 등록하세요.")
             } actions: {
                 if appModel.selectedProject != nil {
-                    Button("새 테스트 계획") { appModel.showPlanSetup() }
+                    Button("새 테스트 계획") { appModel.requestPlanSetup() }
                 }
             }
         case .stage(let stage):

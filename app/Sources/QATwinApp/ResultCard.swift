@@ -68,6 +68,8 @@ struct ResultCard: View {
             if result.outcome != .pass {
                 memo(fillsHeight: fillsHeight)
                 actions
+            } else {
+                passMemo
             }
         }
         .frame(maxWidth: .infinity, maxHeight: fillsHeight ? .infinity : nil, alignment: .topLeading)
@@ -214,6 +216,21 @@ struct ResultCard: View {
             TextEditor(text: memoBinding)
                 .font(.system(size: 13))
                 // 남는 높이는 위 미리보기가 쓰도록 쓰기 칸은 낮게 고정한다.
+                .frame(height: 64)
+                .padding(4)
+                .scrollContentBackground(.hidden)
+                .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 6))
+                .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.qaStrongLine))
+        }
+    }
+
+    private var passMemo: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("메모 — 통과했지만 적어 둘 것 (수정 요청 md에는 들어가지 않아요)")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.qaSecondaryText)
+            TextEditor(text: memoBinding)
+                .font(.system(size: 13))
                 .frame(height: 64)
                 .padding(4)
                 .scrollContentBackground(.hidden)

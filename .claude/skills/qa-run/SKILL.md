@@ -95,4 +95,10 @@ description: Use when running scenarios from a mobile-twin-qa test plan on a dev
                      "expected": "…", "actual": "…", "reason": "보류·미실행 사유 또는 null", "evidence": ["artifacts/HOME-01/"] } ] }
   ```
   경로는 mobile-twin-qa 기준 상대 경로, `evidence`는 실행 폴더 기준. 비밀값은 넣지 않는다.
+- 판정 모드에서는 앱이 진행을 실시간으로 표시하도록 각 단계를 시작할 때와 끝낼 때 응답 텍스트에 한 줄씩 쓴다(Bash `echo` 같은 도구 출력은 앱이 읽지 않는다). 꾸밈 없이 아래 모양 그대로 쓴다.
+  ```
+  진행: 실행 기록 읽기 시작
+  진행: 실행 기록 읽기 끝
+  ```
+  단계 이름과 하는 일: 실행 기록 읽기 — `run-state.json`·`artifacts/` 읽기, 시나리오 판정 — 녹화·checks 확인과 판정, 결과 저장 — `summary.md`·`results.json` 쓰기, 지식 반영 — 5단계.
 - 5단계의 "기존 계획 파일은 고치지 않는다"의 예외는 qa-plan과 같다(실행 전 앱에서 사용자가 고친 경우).

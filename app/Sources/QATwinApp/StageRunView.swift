@@ -155,7 +155,7 @@ struct StageRunView: View {
         case .prepare:
             "Claude Code가 승인한 기기·서버·시나리오로 실행 폴더를 준비해요."
         case .judge:
-            "Claude Code가 실행 기록을 읽고 결과를 판정해요."
+            "Claude Code가 실행 기록을 읽고 결과를 판정해요. 아래 항목은 실제 진행에 맞춰 체크돼요."
         }
     }
 
@@ -163,10 +163,12 @@ struct StageRunView: View {
         stage == .plan && !appModel.stageIsRunning && appModel.activeStage == nil
     }
 
-    /// 스킬이 낸 진행 줄. 계획 단계만 낸다.
+    /// 스킬이 낸 진행 줄. 계획·판정 단계가 낸다.
     private var progress: StageProgress? {
-        guard stage == .plan else { return nil }
-        let progress = StageProgress(log: appModel.stageLog)
+        guard stage == .plan || stage == .judge else { return nil }
+        let progress = stage == .judge
+            ? StageProgress(log: appModel.stageLog, steps: StageProgress.judgeSteps)
+            : StageProgress(log: appModel.stageLog)
         return progress.hasMarkers ? progress : nil
     }
 
@@ -180,7 +182,7 @@ struct StageRunView: View {
         case .register: ["소스 확인", "프로젝트 등록", "설정 저장"]
         case .plan: StageProgress.planSteps
         case .prepare: ["승인 내용 확인", "실행 폴더 만들기", "실행 준비"]
-        case .judge: ["실행 기록 읽기", "시나리오 판정", "결과 저장"]
+        case .judge: StageProgress.judgeSteps
         }
     }
 

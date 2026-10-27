@@ -4,6 +4,8 @@ import Foundation
 public struct StageProgress: Equatable, Sendable {
     /// qa-plan 스킬의 절 순서(범위 확정 → … → 마무리). 스킬의 "앱에서 실행될 때" 절과 이름이 같아야 한다.
     public static let planSteps = ["범위 확정", "소스 맞추기", "지식 정리", "화면 분석", "계획 쓰기", "마무리"]
+    /// qa-run 스킬 판정 모드의 단계 순서. 스킬의 "앱에서 실행될 때" 절과 이름이 같아야 한다.
+    public static let judgeSteps = ["실행 기록 읽기", "시나리오 판정", "결과 저장", "지식 반영"]
     static let marker = "진행:"
 
     /// 끝난 단계.
@@ -13,19 +15,19 @@ public struct StageProgress: Equatable, Sendable {
     /// 진행 줄을 하나라도 봤는지. 없으면 진행 줄을 내지 않는 스킬·단계다.
     public var hasMarkers = false
 
-    public init(log: String) {
+    public init(log: String, steps: [String] = Self.planSteps) {
         for line in log.components(separatedBy: .newlines) {
             // 모델이 목록 기호·굵게·백틱·마침표를 붙여 써도 읽는다.
             let trimmed = line.trimmingCharacters(in: Self.decoration)
             guard trimmed.hasPrefix(Self.marker) else { continue }
             let body = trimmed.dropFirst(Self.marker.count).trimmingCharacters(in: Self.decoration)
             if body.hasSuffix("끝") {
-                guard let step = Self.step(in: String(body.dropLast())) else { continue }
+                guard let step = Self.step(in: String(body.dropLast()), steps: steps) else { continue }
                 finished.insert(step)
                 if current == step { current = nil }
                 hasMarkers = true
             } else if body.hasSuffix("시작") {
-                guard let step = Self.step(in: String(body.dropLast(2))) else { continue }
+                guard let step = Self.step(in: String(body.dropLast(2)), steps: steps) else { continue }
                 current = step
                 hasMarkers = true
             }
@@ -35,9 +37,9 @@ public struct StageProgress: Equatable, Sendable {
     private static let decoration = CharacterSet.whitespaces.union(CharacterSet(charactersIn: "-*>`.。"))
 
     /// "범위 확정(1절)"·"`소스 맞추기`"처럼 꾸민 이름도 planSteps 이름으로 맞춘다. 모르는 이름은 그대로 두고, 빈 이름만 버린다.
-    static func step(in raw: String) -> String? {
+    static func step(in raw: String, steps: [String]) -> String? {
         let name = raw.trimmingCharacters(in: decoration)
-        return planSteps.first { name.hasPrefix($0) } ?? (name.isEmpty ? nil : name)
+        return steps.first { name.hasPrefix($0) } ?? (name.isEmpty ? nil : name)
     }
 }
 

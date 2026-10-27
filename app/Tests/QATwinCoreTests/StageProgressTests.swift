@@ -31,6 +31,19 @@ import Testing
     #expect(progress.current == "지식 정리")
 }
 
+@Test func stageProgressReadsJudgeSteps() {
+    let log = """
+    진행: 실행 기록 읽기 시작
+    진행: 실행 기록 읽기 끝
+    진행: 시나리오 판정 시작
+    """
+    let progress = StageProgress(log: log, steps: StageProgress.judgeSteps)
+
+    #expect(progress.finished == ["실행 기록 읽기"])
+    #expect(progress.current == "시나리오 판정")
+    #expect(progress.hasMarkers)
+}
+
 @Test func lineChangesCountsDuplicatesAndIgnoresBlank() {
     let changes = LineChanges.compare(before: "a\n\nb\nb\nc", after: "a\nb\nc\nd\n\n")
     #expect(changes.added == ["d"])
