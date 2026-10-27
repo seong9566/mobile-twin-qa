@@ -12,7 +12,6 @@ struct ResultCard: View {
         VStack(alignment: .leading, spacing: 16) {
             header
             rawValues
-            // 영상이 남는 높이를 다 쓰도록 폰 화면 비율(1080×2400)로 폭을 정한다.
             GeometryReader { proxy in
                 // 영상은 남는 높이에 맞춰 폰 화면 비율(1080×2400)로 정한다. 창이 낮으면 그만큼 작아진다.
                 let videoHeight = max(proxy.size.height - Self.captionHeight, 0)
@@ -128,6 +127,8 @@ struct ResultCard: View {
             .frame(width: width, height: height)
             .clipShape(RoundedRectangle(cornerRadius: 12))
             Text("artifacts/\(result.id)/video.mp4")
+                .lineLimit(1)
+                .truncationMode(.middle)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(Color.qaTertiaryText)
         }
@@ -177,7 +178,8 @@ struct ResultCard: View {
                 .foregroundStyle(Color.qaSecondaryText)
             TextEditor(text: memoBinding)
                 .font(.system(size: 13))
-                .frame(minHeight: 100, maxHeight: fillsHeight ? .infinity : 160)
+                // 이상적 높이를 고정해야 메모가 길어져도 ViewThatFits가 스크롤 쪽으로 바뀌지 않는다.
+                .frame(minHeight: 100, idealHeight: 100, maxHeight: fillsHeight ? .infinity : 160)
                 .padding(4)
                 .scrollContentBackground(.hidden)
                 .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 6))
