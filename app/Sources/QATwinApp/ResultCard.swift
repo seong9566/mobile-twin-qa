@@ -245,49 +245,58 @@ struct ResultCard: View {
     /// 실패 원인은 판정 단계에서 Claude가 붙인 분류다. 읽기 전용으로 보여 주고, 사람이 녹화를 보고
     /// 다르다고 판단할 때만 "판정 바로잡기"로 바꾼다. 바꾼 값은 review.json에만 남고 원래 판정은 보존된다.
     private var causeRow: some View {
-        let original = result.cause?.rawValue ?? result.rawCause ?? "미정"
         // 예전에 원래 판정과 같은 값을 골라 저장된 경우도 "바꾸지 않음"으로 본다.
         let override = appModel.reviewEntry(for: result).causeOverride.flatMap { $0 == result.cause ? nil : $0 }
         let effective = appModel.effectiveCause(for: result)
-        return VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 8) {
-                Text("실패 원인")
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(Color.qaSecondaryText)
-                    .fixedSize()
-                if let override {
-                    Text(override.rawValue)
-                        .font(.system(size: 13, weight: .semibold))
-                    Text("· 내가 바꿈 (원래 Claude 판정: \(original))")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.qaSecondaryText)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                    Button("되돌리기") { appModel.updateCause(id: result.id, cause: nil) }
-                        .buttonStyle(.link)
-                        .font(.system(size: 12))
-                        .fixedSize()
-                } else {
-                    Text("Claude 판정: \(original)")
-                        .font(.system(size: 13, weight: .semibold))
-                }
-                Menu("판정 바로잡기") {
-                    ForEach(Cause.allCases, id: \.self) { cause in
-                        Button("\(cause.rawValue): \(Self.causeSummary(cause))") {
-                            appModel.updateCause(id: result.id, cause: cause)
-                        }
-                        .disabled(cause == effective)
-                    }
-                }
-                .menuStyle(.button)
+        let originalLabel = result.cause.map(Self.causeLabel) ?? result.rawCause ?? Self.causeLabel(nil)
+        return HStack(spacing: 8) {
+            Text("실패 원인")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.qaSecondaryText)
                 .fixedSize()
-                .help("녹화를 보고 Claude 판정이 틀렸을 때만 바꿔요")
+            Text(override.map(Self.causeLabel) ?? originalLabel)
+                .font(.system(size: 13, weight: .semibold))
+                .fixedSize()
+                .help(effective == nil && result.rawCause != nil
+                    ? "세 가지 분류에 들지 않는 판정이에요 — 필요하면 바로잡아 주세요"
+                    : Self.causeSummary(effective))
+            if override != nil {
+                Text("내가 바꿈 · 원래 Claude 판정: \(originalLabel)")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.qaTertiaryText)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Button("되돌리기") { appModel.updateCause(id: result.id, cause: nil) }
+                    .buttonStyle(.link)
+                    .font(.system(size: 11))
+                    .fixedSize()
+            } else {
+                Text("Claude 판정")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.qaTertiaryText)
+                    .fixedSize()
             }
-            Text(effective == nil && result.rawCause != nil
-                ? "세 가지 분류에 들지 않는 판정이에요 — 필요하면 바로잡아 주세요"
-                : Self.causeSummary(effective))
-                .font(.system(size: 12))
-                .foregroundStyle(Color.qaTertiaryText)
+            Menu("판정 바로잡기") {
+                ForEach(Cause.allCases, id: \.self) { cause in
+                    Button(Self.causeLabel(cause)) {
+                        appModel.updateCause(id: result.id, cause: cause)
+                    }
+                    .disabled(cause == effective)
+                }
+            }
+            .menuStyle(.button)
+            .fixedSize()
+            .help("녹화를 보고 Claude 판정이 틀렸을 때만 바꿔요")
+        }
+    }
+
+    /// 화면에 보이는 원인 이름: 분류 · 다음에 할 일
+    private static func causeLabel(_ cause: Cause?) -> String {
+        switch cause {
+        case .appDefect: "앱 결함 · 코드 수정"
+        case .toolMisjudgment: "도구 오판 · 수정 불필요"
+        case .environment: "환경 · 환경 점검"
+        case nil: "미정 · 확인 필요"
         }
     }
 
