@@ -76,7 +76,7 @@ struct PlanListView: View {
                         }
                     }
 
-                    Text("사람 개입 — 없음: Artemis가 혼자 끝까지 실행해요 · 적혀 있으면 그 동작을 사람이 해야 해요(시나리오를 시작할 때 알려요) · 처음부터 사람이 해야 하는 시나리오는 실행하지 않고 아래 목록에만 남겨요")
+                    Text("사람 개입 — 없음: Artemis가 혼자 끝까지 실행해요 · 그 외: 표시된 동작을 사람이 해야 해요(시나리오를 시작할 때 알려요) · 전부 사람이 해야 하는 시나리오는 실행하지 않고 아래 목록에만 남겨요")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.qaSecondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -118,7 +118,7 @@ struct PlanListView: View {
         HStack(spacing: 14) {
             Text("\(includedCount) / \(appModel.automaticScenarios.count)개 실행")
             Divider().frame(height: 12)
-            Text("사람 필요 \(appModel.automaticScenarios.count { $0.grade == .B && appModel.includedScenarioIDs.contains($0.id) })")
+            Text("사람 개입 \(appModel.automaticScenarios.count { $0.grade == .B && appModel.includedScenarioIDs.contains($0.id) })")
             Divider().frame(height: 12)
             Text("위험 경고 \(appModel.automaticScenarios.count { !SafetyLint.warnings(goal: $0.goal).isEmpty && appModel.includedScenarioIDs.contains($0.id) })")
             Divider().frame(height: 12)
@@ -133,7 +133,7 @@ struct PlanListView: View {
     }
 
     private static let gradeAHelp = "사람 개입 없음: Artemis가 사람 없이 끝까지 실행해요. 판정은 끝난 뒤 Claude가 해요"
-    private static let gradeBHelp = "실행 중 사람이 이 동작을 해야 해요. 시나리오를 시작할 때 알림을 보내니 기기 옆에서 지켜봐 주세요"
+    private static let gradeBHelp = "실행 중 사람이 할 동작이 있어요. 시나리오를 시작할 때 알림을 보내니 기기 옆에서 지켜봐 주세요"
 
     private var includedCount: Int {
         appModel.automaticScenarios.count { appModel.includedScenarioIDs.contains($0.id) }

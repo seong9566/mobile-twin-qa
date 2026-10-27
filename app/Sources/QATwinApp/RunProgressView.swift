@@ -75,7 +75,7 @@ struct RunProgressView: View {
                 HStack(spacing: 8) {
                     Text(scenario.title)
                     if scenario.grade == .B {
-                        Text("B · \(scenario.gradeNote ?? "사람 확인")")
+                        Text(scenario.gradeNote ?? "있음")
                             .font(.system(size: 11, weight: .semibold))
                             .foregroundStyle(Color.qaHold)
                             .padding(.horizontal, 6)
