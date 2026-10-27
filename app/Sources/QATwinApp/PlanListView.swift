@@ -76,7 +76,7 @@ struct PlanListView: View {
                         }
                     }
 
-                    Text("등급 — A 자동: Artemis가 혼자 끝까지 해요 · B 반자동: 중간에 사람이 할 동작이 있어 그때 알려요 · C 수동: 실행하지 않고 목록만 남겨요")
+                    Text("등급 — A 자동: Artemis가 혼자 끝까지 실행해요 · B 반자동: 중간에 사람이 할 동작이 있어요(시작할 때 알려요) · C 수동: 실행하지 않고 목록만 남겨요")
                         .font(.system(size: 11))
                         .foregroundStyle(Color.qaSecondaryText)
                         .fixedSize(horizontal: false, vertical: true)
@@ -132,8 +132,8 @@ struct PlanListView: View {
         .background(.bar)
     }
 
-    private static let gradeAHelp = "A 자동: Artemis가 사람 없이 끝까지 실행하고 판정해요"
-    private static let gradeBHelp = "B 반자동: 실행 중 사람이 할 동작(로그인·태그 등)이 있어요. 그 시점에 알림을 보내요"
+    private static let gradeAHelp = "A 자동: Artemis가 사람 없이 끝까지 실행해요. 판정은 끝난 뒤 Claude가 해요"
+    private static let gradeBHelp = "B 반자동: 실행 중 사람이 할 동작(로그인·태그 등)이 있어요. 시나리오를 시작할 때 알림을 보내니 기기 옆에서 지켜봐 주세요"
 
     private var includedCount: Int {
         appModel.automaticScenarios.count { appModel.includedScenarioIDs.contains($0.id) }
