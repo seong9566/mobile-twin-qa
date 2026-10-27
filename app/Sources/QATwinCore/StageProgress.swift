@@ -34,7 +34,7 @@ public struct StageProgress: Equatable, Sendable {
 
     private static let decoration = CharacterSet.whitespaces.union(CharacterSet(charactersIn: "-*>`.。"))
 
-    /// "범위 확정(1절)"·"`소스 맞추기`"처럼 꾸민 이름도 planSteps 이름으로 맞춘다. 모르는 이름은 버린다.
+    /// "범위 확정(1절)"·"`소스 맞추기`"처럼 꾸민 이름도 planSteps 이름으로 맞춘다. 모르는 이름은 그대로 두고, 빈 이름만 버린다.
     static func step(in raw: String) -> String? {
         let name = raw.trimmingCharacters(in: decoration)
         return planSteps.first { name.hasPrefix($0) } ?? (name.isEmpty ? nil : name)

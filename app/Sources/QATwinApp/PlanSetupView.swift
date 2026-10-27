@@ -81,6 +81,9 @@ struct PlanSetupView: View {
                 }
                 .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.qaLine))
+                if !source.isCache, source.commit == nil, !FileManager.default.fileExists(atPath: source.path) {
+                    note("이 경로에 소스 폴더가 없어요. project.local.yaml의 source_path를 확인해 주세요.", warn: true)
+                }
                 if source.isCache {
                     note("받아 둔 소스(.cache)라 계획을 쓸 때 project.yaml 브랜치의 최신으로 맞춰요.", warn: false)
                 }
