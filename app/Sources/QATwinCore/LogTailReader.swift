@@ -17,6 +17,8 @@ public struct LogTailReader: Sendable {
     private var head: [UInt8] = []
     private var lines: [String] = []
     private var pending: [UInt8] = []
+    /// pending 앞부분을 잘라 냈는지. 잘린 줄은 truncationMarker로 시작한다.
+    private var pendingTruncated = false
     private var committed = Counters()
 
     private struct Counters: Sendable {
@@ -84,9 +86,14 @@ public struct LogTailReader: Sendable {
     }
 
     /// 마지막 lineLimit 줄. 끝에 줄바꿈이 없으면 쓰는 중인 줄도 포함한다.
+    /// 앞부분을 잘라 낸 줄은 truncationMarker로 시작한다.
     public var tail: String {
-        (lines + [Self.decodeComplete(pending)]).suffix(lineLimit).joined(separator: "\n")
+        let current = (pendingTruncated ? Self.truncationMarker : "") + Self.decodeComplete(pending)
+        return (lines + [current]).suffix(lineLimit).joined(separator: "\n")
     }
+
+    /// 앞부분을 잘라 낸 줄의 맨 앞 표식. SecretRedactor가 그 뒤의 값 조각을 가린다.
+    public static let truncationMarker = "…"
 
     private static let headLength = 64
     static let pendingLimit = 64 * 1024
@@ -106,6 +113,7 @@ public struct LogTailReader: Sendable {
         head = []
         lines = []
         pending = []
+        pendingTruncated = false
         committed = Counters()
     }
 
@@ -118,8 +126,11 @@ public struct LogTailReader: Sendable {
         // 0x0A는 UTF-8 다중 바이트 글자 안에 나오지 않으므로 줄 단위로 자르면 글자가 깨지지 않는다.
         let complete = pending[..<lastNewline]
         pending = Array(pending[(lastNewline + 1)...])
+        var truncated = pendingTruncated
+        pendingTruncated = false
         for lineBytes in complete.split(separator: 0x0A, omittingEmptySubsequences: false) {
-            var line = String(decoding: lineBytes, as: UTF8.self)
+            var line = (truncated ? Self.truncationMarker : "") + String(decoding: lineBytes, as: UTF8.self)
+            truncated = false
             if line.hasSuffix("\r") {
                 line.removeLast()
             }
@@ -140,6 +151,7 @@ public struct LogTailReader: Sendable {
             start += 1
         }
         pending.removeFirst(start)
+        pendingTruncated = true
     }
 
     private func withPending() -> Counters {

@@ -36,11 +36,13 @@ struct ResultCard: View {
         .padding(.vertical, 20)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.qaBackground)
-        .task(id: result.id) {
-            videoAspect = Self.phoneAspect
-            if let url = Artifacts.video(runDir: runDir, id: result.id), let aspect = await Self.aspect(of: url) {
-                videoAspect = aspect
+        // 같은 시나리오 ID라도 다른 실행(다른 기기)이면 녹화가 다르므로 영상 경로로 다시 읽는다.
+        .task(id: Artifacts.video(runDir: runDir, id: result.id)) {
+            guard let url = Artifacts.video(runDir: runDir, id: result.id) else {
+                videoAspect = Self.phoneAspect
+                return
             }
+            videoAspect = await Self.aspect(of: url) ?? Self.phoneAspect
         }
     }
 

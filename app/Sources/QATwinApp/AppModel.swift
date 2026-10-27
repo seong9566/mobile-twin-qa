@@ -418,8 +418,8 @@ final class AppModel {
             artemisLog = "로그를 기다리고 있어요."
             return
         }
-        // 마지막 줄은 앞이 잘렸거나 아직 쓰는 중일 수 있어 값 조각도 가린다.
-        artemisLog = SecretRedactor.redact(reader.tail, values: runSecretValues, maskingEdgeFragments: true)
+        // 앞을 잘라 낸 줄과 아직 쓰는 중인 마지막 줄에 걸친 값 조각도 가린다.
+        artemisLog = SecretRedactor.redact(reader.tail, values: runSecretValues, truncationMarker: LogTailReader.truncationMarker)
     }
 
     func updateMemo(id: String, memo: String) {

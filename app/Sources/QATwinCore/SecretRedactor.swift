@@ -8,16 +8,41 @@ public enum SecretRedactor {
 
     /// 긴 값부터 바꿔서 다른 값을 품은 값도 통째로 가린다.
     /// 로그·스트림 JSON 안에 이스케이프되어 들어간 값(`\"`, `\\`, `\/`, `\uXXXX`)도 함께 가린다.
-    /// maskingEdgeFragments가 true면 마지막 줄의 앞뒤에 걸친 값 조각도 가린다
-    /// (앞부분을 잘라 낸 줄, 아직 쓰는 중인 줄).
-    public static func redact(_ text: String, values: [String], maskingEdgeFragments: Bool = false) -> String {
+    /// truncationMarker를 주면 계속 늘어나는 로그의 끝부분으로 보고 값 조각도 가린다:
+    /// 그 표식으로 시작하는 줄(앞을 잘라 낸 줄)의 맨 앞 조각과, 아직 쓰는 중일 수 있는 마지막 줄의 맨 끝 조각.
+    public static func redact(_ text: String, values: [String], truncationMarker: String? = nil) -> String {
         // 아주 짧은 값은 보통 글자까지 가리고 비밀값으로서 의미도 없으므로 건너뛴다.
-        let secrets = values.filter { $0.count >= minimumLength }
-        let redacted = Set(secrets.flatMap(forms))
+        let secrets = Set(values.filter { $0.count >= minimumLength }.flatMap(forms))
             .sorted { $0.count != $1.count ? $0.count > $1.count : $0 < $1 }
-            .reduce(text) { $0.replacingOccurrences(of: $1, with: mask) }
-        guard maskingEdgeFragments else { return redacted }
-        return maskLastLineEdges(redacted, values: secrets)
+        let redacted = secrets.reduce(text) { $0.replacingOccurrences(of: $1, with: mask) }
+        guard let truncationMarker else { return redacted }
+        var lines = redacted.components(separatedBy: "\n")
+        for index in lines.indices where lines[index].hasPrefix(truncationMarker) {
+            let rest = lines[index].dropFirst(truncationMarker.count)
+            if let fragment = edgeFragment(of: secrets, where: { rest.hasPrefix($0) }, cut: { $0.suffix($1) }) {
+                lines[index] = truncationMarker + mask + rest.dropFirst(fragment.count)
+            }
+        }
+        if let last = lines.indices.last,
+           let fragment = edgeFragment(of: secrets, where: { lines[last].hasSuffix($0) }, cut: { $0.prefix($1) }) {
+            lines[last] = lines[last].dropLast(fragment.count) + mask
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    /// 값의 앞(prefix)이나 뒤(suffix) 조각 가운데 matches를 만족하는 가장 긴 것. 값 전체는 이미 가렸다.
+    private static func edgeFragment(
+        of secrets: [String],
+        where matches: (String) -> Bool,
+        cut: (String, Int) -> Substring
+    ) -> String? {
+        for value in secrets {
+            for length in stride(from: value.count - 1, through: minimumLength, by: -1) {
+                let fragment = String(cut(value, length))
+                if matches(fragment) { return fragment }
+            }
+        }
+        return nil
     }
 
     /// 값 그대로와 JSON 문자열 안에 들어갔을 때의 모양(한 번·두 번 이스케이프).
@@ -55,6 +80,8 @@ public enum SecretRedactor {
             case "\n": out += "\\n"
             case "\r": out += "\\r"
             case "\t": out += "\\t"
+            case "\u{08}": out += "\\b"
+            case "\u{0C}": out += "\\f"
             case _ where scalar.value < 0x20:
                 out += hex(UInt16(scalar.value))
             case _ where ascii && scalar.value > 0x7E:
@@ -64,29 +91,5 @@ public enum SecretRedactor {
             }
         }
         return out
-    }
-
-    /// 마지막 줄이 값의 뒷부분으로 시작하거나 값의 앞부분으로 끝나면 그 조각을 가린다.
-    private static func maskLastLineEdges(_ text: String, values: [String]) -> String {
-        let lineStart = text.lastIndex(of: "\n").map { text.index(after: $0) } ?? text.startIndex
-        var line = String(text[lineStart...])
-        guard !line.isEmpty else { return text }
-        let longestFirst = values.sorted { $0.count > $1.count }
-        if let fragment = longestFirst.lazy.compactMap({ value in
-            fragments(of: value).first { line.hasPrefix(String(value.suffix($0))) }.map { String(value.suffix($0)) }
-        }).first {
-            line = mask + line.dropFirst(fragment.count)
-        }
-        if let fragment = longestFirst.lazy.compactMap({ value in
-            fragments(of: value).first { line.hasSuffix(String(value.prefix($0))) }.map { String(value.prefix($0)) }
-        }).first, line != mask {
-            line = line.dropLast(fragment.count) + mask
-        }
-        return text[..<lineStart] + line
-    }
-
-    /// 값보다 짧은 조각 길이, 긴 것부터. 값 전체는 앞에서 이미 가렸다.
-    private static func fragments(of value: String) -> StrideThrough<Int> {
-        stride(from: value.count - 1, through: minimumLength, by: -1)
     }
 }
