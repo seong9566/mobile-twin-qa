@@ -13,10 +13,14 @@ public enum StagePrompt {
         "앱 실행 모드: \(Stage.register.rawValue)\n/qa-init\n- 소스 경로: \(sourcePath)\n- 분류: \(category.rawValue)"
     }
 
-    public static func plan(project: ProjectRef, scope: String?) -> String {
+    /// answers는 앞서 받은 `결정 필요:`에 사용자가 단 답이다(`- 답: <결정> → <답>`).
+    public static func plan(project: ProjectRef, scope: String?, answers: [String] = []) -> String {
         var prompt = "앱 실행 모드: \(Stage.plan.rawValue)\n/qa-plan\n- 프로젝트: \(project.id)"
-        if let scope {
+        if let scope = scope?.trimmingCharacters(in: .whitespacesAndNewlines), !scope.isEmpty {
             prompt += "\n- 범위: \(scope)"
+        }
+        for answer in answers {
+            prompt += "\n- 답: \(answer)"
         }
         return prompt
     }
