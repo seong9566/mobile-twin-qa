@@ -734,6 +734,31 @@ final class AppModel {
         return steps
     }
 
+    /// 고른 프로젝트·계획·실행 기준으로 이미 끝낸 단계. 어느 단계 화면을 보든 같다.
+    /// 지금 도는 단계와 그 뒤 단계는 끝나지 않은 것으로 본다.
+    func completedSteps() -> Set<PipelineStep> {
+        var steps: Set<PipelineStep> = []
+        if selectedProject != nil { steps.insert(.register) }
+        if selectedPlan != nil { steps.insert(.plan) }
+        if let run = stepRun {
+            steps.insert(.review)
+            let fileManager = FileManager.default
+            if fileManager.fileExists(atPath: run.appending(path: "results.json").path)
+                || fileManager.fileExists(atPath: run.appending(path: "summary.md").path) {
+                steps.formUnion([.run, .results])
+            }
+        }
+        let ongoing: [PipelineStep]
+        switch activeStage {
+        case .register: ongoing = [.register, .plan, .review, .run, .results]
+        case .plan: ongoing = [.plan, .review, .run, .results]
+        case .prepare: ongoing = [.run, .results]
+        case .judge: ongoing = [.results]
+        case nil: ongoing = activeRun != nil ? [.run, .results] : []
+        }
+        return steps.subtracting(ongoing)
+    }
+
     func showStep(_ step: PipelineStep) {
         guard availableSteps().contains(step) else { return }
         switch step {

@@ -25,6 +25,10 @@ struct StageRecordView: View {
                     projectSummary(project)
                 }
 
+                if stage == .plan, let plan = appModel.selectedPlan {
+                    planSummary(plan)
+                }
+
                 if let record, !record.log.isEmpty {
                     DisclosureGroup(isExpanded: $isLogExpanded) {
                         ScrollView(.horizontal) {
@@ -166,6 +170,29 @@ struct StageRecordView: View {
         }
         .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.qaLine))
+    }
+
+    /// 지금 고른 계획. 계획을 확인하러 온 사람이 목록 확인으로 바로 넘어갈 수 있게 한다.
+    private func planSummary(_ plan: PlanDocument) -> some View {
+        let count = { (grade: Grade) in plan.scenarios.count { $0.grade == grade } }
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("지금 고른 계획")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.qaSecondaryText)
+                Spacer()
+                Button("목록 확인으로", systemImage: "list.bullet") { appModel.showStep(.review) }
+            }
+            VStack(alignment: .leading, spacing: 0) {
+                summaryRow("파일", plan.url.lastPathComponent)
+                Divider()
+                summaryRow("소스", "\(plan.header.branch) · \(plan.header.commit) · 앱 버전 \(plan.header.appVersion)")
+                Divider()
+                summaryRow("시나리오", "자동 \(count(.A)) · 반자동 \(count(.B)) · 수동 \(appModel.manualScenarioCount)")
+            }
+            .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.qaLine))
+        }
     }
 
     private func summaryRow(_ label: String, _ value: String) -> some View {

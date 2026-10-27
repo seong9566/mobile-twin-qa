@@ -120,6 +120,7 @@ struct QATwinApp: App {
             PipelinePath(
                 current: pipelineStep,
                 available: appModel.availableSteps(),
+                completed: appModel.completedSteps(),
                 onSelect: appModel.showStep
             )
             .fixedSize()

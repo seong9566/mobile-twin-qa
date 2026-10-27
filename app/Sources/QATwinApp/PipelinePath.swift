@@ -11,6 +11,8 @@ enum PipelineStep: String, CaseIterable {
 struct PipelinePath: View {
     let current: PipelineStep?
     let available: Set<PipelineStep>
+    /// 이미 끝낸 단계. 지금 보고 있는 화면(current)과 따로 정해서, 앞 단계를 다시 봐도 체크가 사라지지 않는다.
+    let completed: Set<PipelineStep>
     let onSelect: (PipelineStep) -> Void
 
     var body: some View {
@@ -20,14 +22,14 @@ struct PipelinePath: View {
                     // 단계를 누르면 그 단계의 진행 상황·기록 화면으로 간다.
                     Button { onSelect(step) } label: {
                         HStack(spacing: 5) {
-                            if stepIndex(step) < stepIndex(current) {
+                            if completed.contains(step) {
                                 Image(systemName: "checkmark")
                                     .foregroundStyle(Color.qaPass)
                             }
                             Text(step.rawValue)
                         }
                         .font(.system(size: 12, weight: step == current ? .semibold : .regular))
-                        .foregroundStyle(stepIndex(step) <= stepIndex(current) ? Color.qaText : Color.qaSecondaryText)
+                        .foregroundStyle(completed.contains(step) || step == current ? Color.qaText : Color.qaSecondaryText)
                         .padding(.horizontal, 9)
                         .padding(.vertical, 4)
                         .contentShape(Capsule())
@@ -52,11 +54,6 @@ struct PipelinePath: View {
         }
         .accessibilityElement(children: .contain)
         .accessibilityLabel("진행 단계")
-    }
-
-    private func stepIndex(_ step: PipelineStep?) -> Int {
-        guard let step else { return -1 }
-        return PipelineStep.allCases.firstIndex(of: step) ?? 0
     }
 }
 
