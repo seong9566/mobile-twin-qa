@@ -1193,7 +1193,14 @@ final class AppModel {
         stageResultIsError = nil
         stageResultSummary = ""
         stageRawLog = ""
-        stageSecretValues = selectedProject.map { EnvFile(url: $0.dir.appending(path: ".env")).values() } ?? []
+        stageSecretValues = selectedProject.map { project in
+            let yaml = (try? String(
+                contentsOf: project.dir.appending(path: "project.yaml"),
+                encoding: .utf8
+            )) ?? ""
+            let accountKeys = Set(Workspace.accountEnvKeys(projectYAML: yaml))
+            return SecretKeys.values(envURL: project.dir.appending(path: ".env"), accountKeys: accountKeys)
+        } ?? []
         stageStartedAt = .now
         stageIsRunning = true
         // 앞 단계의 출력·비용을 비운 뒤에 첫 기록을 남긴다.
@@ -1298,7 +1305,15 @@ final class AppModel {
         runDir: URL
     ) async {
         // 실행 중에는 .env를 잠그므로 시작할 때 한 번 읽은 값을 끝까지 쓴다.
-        runSecretValues = activeRun.map { EnvFile(url: $0.project.dir.appending(path: ".env")).values() } ?? []
+        runSecretValues = activeRun.map { activeRun in
+            let project = activeRun.project
+            let yaml = (try? String(
+                contentsOf: project.dir.appending(path: "project.yaml"),
+                encoding: .utf8
+            )) ?? ""
+            let accountKeys = Set(Workspace.accountEnvKeys(projectYAML: yaml))
+            return SecretKeys.values(envURL: project.dir.appending(path: ".env"), accountKeys: accountKeys)
+        } ?? []
         let operationTask = Task { await operation() }
         for await event in orchestrator.events {
             handle(event)
