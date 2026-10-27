@@ -439,8 +439,14 @@ public actor RunOrchestrator {
                   cleared.status == 0
             else { return "앱 데이터를 지우지 못했어요" }
             // 개별 권한 실패는 실패가 아니다(스펙 5.7). adb가 끊기면 다음 명령에서 드러난다.
+            // 개별 권한 실패는 실패가 아니다. 묶음이 30초를 넘기거나 adb가 끊기면 실패(스펙 5.7).
+            let started = Date()
             for permission in reset.permissions {
-                _ = await adb(["shell", "pm", "grant", reset.package, permission], timeout: .seconds(30))
+                let remaining = 30 - Date().timeIntervalSince(started)
+                guard remaining > 0 else { return "권한 부여가 30초 안에 끝나지 않았어요" }
+                guard await adb(["shell", "pm", "grant", reset.package, permission], timeout: .seconds(remaining)) != nil else {
+                    return "권한을 주지 못했어요 — adb 연결을 확인해 주세요"
+                }
             }
         }
         guard let launched = await adb(["shell", "am", "start", "-n", reset.launch], timeout: .seconds(20)),

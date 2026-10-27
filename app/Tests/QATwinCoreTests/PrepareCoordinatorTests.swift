@@ -46,7 +46,7 @@ import Testing
     }
 
     @Test func prepareSkipsBuildAndInstallWhenRecordMatches() async throws {
-        let fixture = try makeFixture(build: "build-app")
+        let fixture = try makeFixture(build: "build-app --dart-define-from-file=$QA_APP_ENV")
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         let buildEnv = BuildEnv.make(
             envURL: fixture.projectDir.appending(path: ".env"),
@@ -178,7 +178,7 @@ import Testing
     }
 
     @Test func prepareFailsWhenMacIPIsNeededButMissing() async throws {
-        let fixture = try makeFixture(build: "build-app", vars: #"vars: { API_BASE_URL: "http://{{mac_ip}}:5199" }"#)
+        let fixture = try makeFixture(build: "build-app --dart-define-from-file=$QA_APP_ENV", vars: #"vars: { API_BASE_URL: "http://{{mac_ip}}:5199" }"#)
         defer { try? FileManager.default.removeItem(at: fixture.root) }
         let coordinator = PrepareCoordinator(
             input: fixture.input,
@@ -194,6 +194,26 @@ import Testing
         let events = await collected
 
         #expect(events.contains(.item(.build, .failed("맥의 IP 주소를 찾지 못했어요 — 맥의 네트워크 연결을 확인해 주세요"))))
+    }
+
+    @Test func prepareIgnoresMacIPWhenBuildDoesNotUseQAAppEnv() async throws {
+        let fixture = try makeFixture(build: "build-app", vars: #"vars: { API_BASE_URL: "http://{{mac_ip}}:5199" }"#)
+        defer { try? FileManager.default.removeItem(at: fixture.root) }
+        let coordinator = PrepareCoordinator(
+            input: fixture.input,
+            api: FakeArtemisAPI(),
+            shell: readyShell(),
+            health: FakeHealth(responses: []),
+            launcher: FakeLauncher(scripts: [("build-app", "exit 0")]),
+            pollInterval: .milliseconds(10)
+        )
+
+        async let collected = collect(coordinator.events)
+        await coordinator.run()
+        let events = await collected
+
+        #expect(events.contains(.item(.build, .done("빌드했어요"))))
+        #expect(InstallRecords.load(projectDir: fixture.projectDir)["DEVICE1"]?.envSHA256 == "")
     }
 
     @Test func prepareChecksDiffInSourceDir() async throws {

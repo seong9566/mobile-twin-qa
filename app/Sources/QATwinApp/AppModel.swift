@@ -649,9 +649,10 @@ final class AppModel {
             switch event {
             case .item(let step, let state):
                 prepareItems[step] = state
-                if step == .device, case .waitingForHuman = state, !lockNotified {
+                if step == .device, case .waitingForHuman(let reason) = state, !lockNotified {
                     lockNotified = true
-                    Notifier.send(title: "기기 잠금을 풀어 주세요", body: "풀면 준비를 이어서 해요.")
+                    // 잠금만이 아니라 연결·Wi-Fi일 수도 있으니 이유를 그대로 알린다.
+                    Notifier.send(title: "기기를 확인해 주세요", body: "\(reason) — 고치면 준비를 이어서 해요.")
                 }
             case .log(let line):
                 let lines = (prepareLogTail.isEmpty ? [] : prepareLogTail.components(separatedBy: "\n")) + [line]

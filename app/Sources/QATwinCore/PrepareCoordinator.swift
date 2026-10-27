@@ -391,6 +391,8 @@ public actor PrepareCoordinator {
     private func run(from firstStep: PrepareStep) async {
         let steps = PrepareStep.allCases
         let startIndex = steps.firstIndex(of: firstStep) ?? 0
+        // 지난 시도의 실패 항목이 남아 엉뚱한 행이 빨갛게 되지 않게 비운다.
+        failedStep = nil
         do {
             for step in steps[startIndex...] {
                 try checkCancellation()
@@ -574,7 +576,7 @@ public actor PrepareCoordinator {
             entry: record,
             headCommit: sourceCommit,
             sourceDirty: sourceDirty,
-            envSHA256: env.sha256,
+            envSHA256: input.config.usesQAAppEnv ? env.sha256 : "",
             packageInstalled: deviceStatus?.packageInstalled == true,
             forceRebuild: input.forceRebuild
         )
@@ -650,7 +652,7 @@ public actor PrepareCoordinator {
                         package: package,
                         commit: commit,
                         dirty: sourceDirty,
-                        envSHA256: env.sha256,
+                        envSHA256: input.config.usesQAAppEnv ? env.sha256 : "",
                         at: Date()
                     ),
                     serial: input.serial,
@@ -660,6 +662,8 @@ public actor PrepareCoordinator {
             }
         } else if result.buildSkipped {
             emit(.item(.install, .skipped("설치본을 그대로 써요")))
+        } else {
+            throw PrepareFailure(.install, "project.yaml에 build.android_apk가 없어 설치하지 못했어요")
         }
 
         if let launch = input.config.launch {
@@ -777,7 +781,8 @@ public actor PrepareCoordinator {
         let address = await macIP()
         let envText = (try? String(contentsOf: input.projectDir.appending(path: ".env"), encoding: .utf8)) ?? ""
         let needsIP = server.vars.values.contains { $0.contains("{{mac_ip}}") } || envText.contains("{{mac_ip}}")
-        if address == nil, needsIP {
+        // $QA_APP_ENV를 안 쓰는 빌드는 이 env를 쓰지 않으므로 맥 IP가 없어도 된다.
+        if address == nil, needsIP, input.config.usesQAAppEnv {
             throw PrepareFailure(.build, "맥의 IP 주소를 찾지 못했어요 — 맥의 네트워크 연결을 확인해 주세요")
         }
         let projectYAML = (try? String(
