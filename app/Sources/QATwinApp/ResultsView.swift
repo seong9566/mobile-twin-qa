@@ -170,10 +170,10 @@ struct ResultsView: View {
 
     private var statusBar: some View {
         let record = appModel.judgeRecord(for: runDir)
-        let title = if let judgeDuration = appModel.judgeDuration {
-            "판정: Claude Code · \(duration(judgeDuration))"
-        } else if let record, let finishedAt = record.finishedAt {
+        let title = if let record, let finishedAt = record.finishedAt {
             "판정: Claude Code · \(duration(finishedAt.timeIntervalSince(record.startedAt)))"
+        } else if let judgeDuration = appModel.judgeDuration {
+            "판정: Claude Code · \(duration(judgeDuration))"
         } else {
             "판정: Claude Code"
         }

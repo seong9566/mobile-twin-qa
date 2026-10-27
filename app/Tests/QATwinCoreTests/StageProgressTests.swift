@@ -44,6 +44,13 @@ import Testing
     #expect(progress.hasMarkers)
 }
 
+@Test func stageProgressKeepsUnknownStepNamesRaw() {
+    let progress = StageProgress(log: "진행: 지식 정리 시작", steps: StageProgress.judgeSteps)
+
+    #expect(progress.current == "지식 정리")
+    #expect(!StageProgress.judgeSteps.contains(progress.current ?? ""))
+}
+
 @Test func lineChangesCountsDuplicatesAndIgnoresBlank() {
     let changes = LineChanges.compare(before: "a\n\nb\nb\nc", after: "a\nb\nc\nd\n\n")
     #expect(changes.added == ["d"])

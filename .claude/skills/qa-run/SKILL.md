@@ -100,5 +100,5 @@ description: Use when running scenarios from a mobile-twin-qa test plan on a dev
   진행: 실행 기록 읽기 시작
   진행: 실행 기록 읽기 끝
   ```
-  단계 이름과 하는 일: 실행 기록 읽기 — `run-state.json`·`artifacts/` 읽기, 시나리오 판정 — 녹화·checks 확인과 판정, 결과 저장 — `summary.md`·`results.json` 쓰기, 지식 반영 — 5단계.
+  단계 이름과 하는 일: 실행 기록 읽기 — `run-state.json`·`artifacts/` 읽기, 시나리오 판정 — 녹화·checks 확인과 판정, 결과 저장 — `summary.md`·`results.json` 쓰기, 지식 반영 — 5단계. `결정 필요:`로 멈출 때는 그 단계의 끝 줄을 쓰지 않는다.
 - 5단계의 "기존 계획 파일은 고치지 않는다"의 예외는 qa-plan과 같다(실행 전 앱에서 사용자가 고친 경우).

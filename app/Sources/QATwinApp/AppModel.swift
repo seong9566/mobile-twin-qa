@@ -209,8 +209,10 @@ final class AppModel {
                 withUnsavedEditsCheck { [self] in selectProject(project) }
                 return
             }
-            pendingSourceURL = url
-            isCategoryConfirmationPresented = true
+            withUnsavedEditsCheck { [self] in
+                pendingSourceURL = url
+                isCategoryConfirmationPresented = true
+            }
         } catch {
             show(error)
         }
@@ -821,7 +823,7 @@ final class AppModel {
                 plan: workspace.map { relativePath(context.plan.url, from: $0.root) } ?? context.plan.url.path,
                 runDir: workspace.map { relativePath(context.runDir, from: $0.root) } ?? context.runDir.path
             ),
-            record: StageRecord(stage: .judge, key: StageRecord.judgeKey(project: context.project, runName: context.runDir.lastPathComponent), startedAt: .now, status: .running)
+            record: StageRecord(stage: .judge, key: StageRecord.judgeKey(project: context.project, planName: context.runDir.deletingLastPathComponent().lastPathComponent, runName: context.runDir.lastPathComponent), startedAt: .now, status: .running)
         )
         judgeDuration = Date.now.timeIntervalSince(started)
         if succeeded {
@@ -846,7 +848,7 @@ final class AppModel {
             && activeRun?.runDir.standardizedFileURL == runDir.standardizedFileURL
         return stageRecordStore.load(
             stage: .judge,
-            key: StageRecord.judgeKey(project: project, runName: runDir.lastPathComponent),
+            key: StageRecord.judgeKey(project: project, planName: runDir.deletingLastPathComponent().lastPathComponent, runName: runDir.lastPathComponent),
             isLive: isLive
         )
     }
@@ -865,14 +867,22 @@ final class AppModel {
 
     /// 확인 창의 "저장하고 이동". 저장에 실패하면(알림이 뜬다) 이동하지 않는다.
     func saveEditsThenNavigate() {
-        guard savePlan(), let pending = pendingNavigation else { return }
+        let pending = pendingNavigation
         pendingNavigation = nil
+        guard savePlan(), let pending else { return }
         pending()
     }
 
-    /// 확인 창의 "버리고 이동".
+    /// 확인 창의 "버리고 이동". 파일을 다시 읽어 고친 goal·통과 조건을 되돌린다(순서·포함은 그대로).
     func discardEditsThenNavigate() {
         editedScenarioIDs = []
+        if let url = selectedPlan?.url, let saved = try? PlanDocument.load(url) {
+            let positions = Dictionary(uniqueKeysWithValues: orderedScenarios.enumerated().map { ($0.element.id, $0.offset) })
+            selectedPlan = saved
+            orderedScenarios = saved.scenarios.sorted {
+                (positions[$0.id] ?? Int.max) < (positions[$1.id] ?? Int.max)
+            }
+        }
         let pending = pendingNavigation
         pendingNavigation = nil
         pending?()
@@ -887,9 +897,11 @@ final class AppModel {
     }
 
     func requestSelectPlan(at url: URL) {
+        let isCurrent = url.standardizedFileURL == selectedPlan?.url.standardizedFileURL
         withUnsavedEditsCheck { [self] in
+            let target = isCurrent ? (selectedPlan?.url ?? url) : url
             do {
-                try selectPlan(at: url)
+                try selectPlan(at: target)
             } catch {
                 notice = AppNotice(title: "계획을 열지 못했어요", message: error.localizedDescription)
             }
@@ -1014,8 +1026,10 @@ final class AppModel {
     func restartStage(from record: StageRecord?) async {
         guard !hasActiveExecution else { return }
         if record?.stage == .register, let path = record?.sourcePath, let category = record?.category {
-            pendingSourceURL = URL(fileURLWithPath: path)
-            await registerPendingSource(as: category)
+            withUnsavedEditsCheck { [self] in
+                pendingSourceURL = URL(fileURLWithPath: path)
+                Task { await registerPendingSource(as: category) }
+            }
         } else {
             requestPlanSetup()
         }
@@ -1322,7 +1336,7 @@ final class AppModel {
                 plan: workspace.map { relativePath(context.plan.url, from: $0.root) } ?? context.plan.url.path,
                 runDir: workspace.map { relativePath(runDir, from: $0.root) } ?? runDir.path
             ),
-            record: StageRecord(stage: .judge, key: StageRecord.judgeKey(project: context.project, runName: runDir.lastPathComponent), startedAt: .now, status: .running)
+            record: StageRecord(stage: .judge, key: StageRecord.judgeKey(project: context.project, planName: runDir.deletingLastPathComponent().lastPathComponent, runName: runDir.lastPathComponent), startedAt: .now, status: .running)
         )
         judgeDuration = Date.now.timeIntervalSince(started)
         if succeeded {

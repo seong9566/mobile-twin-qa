@@ -59,7 +59,7 @@ struct QATwinApp: App {
                 Button("버리고 이동", role: .destructive) { appModel.discardEditsThenNavigate() }
                 Button("취소", role: .cancel) { appModel.cancelNavigation() }
             } message: {
-                Text("이동하면 목록 확인에서 고친 goal·통과 조건이 사라져요.")
+                Text("버리면 목록 확인에서 고친 goal·통과 조건이 사라져요.")
             }
             .confirmationDialog(
                 "전체 실행을 중지할까요?",
