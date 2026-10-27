@@ -300,7 +300,15 @@ final class QATwinApplicationDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         guard let appModel else { return .terminateNow }
-        guard appModel.activeRun != nil || appModel.activeStage != nil else { return .terminateNow }
+        guard appModel.activeRun != nil || appModel.activeStage != nil else {
+            // 실행 중이 아니어도 앱이 띄운 Artemis·테스트 서버는 끝내고 나간다.
+            guard appModel.hasOwnedProcesses else { return .terminateNow }
+            Task {
+                await appModel.terminateOwnedProcesses()
+                sender.reply(toApplicationShouldTerminate: true)
+            }
+            return .terminateLater
+        }
         let alert = NSAlert()
         alert.messageText = "실행을 중지하고 종료할까요?"
         alert.informativeText = "진행 중인 Artemis 세션과 Claude Code를 중지한 뒤 종료해요."

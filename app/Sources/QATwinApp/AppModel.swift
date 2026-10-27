@@ -760,7 +760,14 @@ final class AppModel {
             try? await Task.sleep(for: .milliseconds(100))
         }
         claudeRunner?.cancel()
-        // 앱이 띄운 Artemis·테스트 서버를 함께 끝낸다. 터미널에서 띄운 것은 건드리지 않는다.
+        await terminateOwnedProcesses()
+    }
+
+    /// 앱이 띄운 Artemis·테스트 서버가 있는지(종료할 때 끝낼 것).
+    var hasOwnedProcesses: Bool { ownedProcesses.contains { $0.isRunning } }
+
+    /// 앱이 띄운 Artemis·테스트 서버를 함께 끝낸다. 터미널에서 띄운 것은 건드리지 않는다.
+    func terminateOwnedProcesses() async {
         await keepOwnedProcesses()
         for process in ownedProcesses { await process.terminate() }
         ownedProcesses = []
