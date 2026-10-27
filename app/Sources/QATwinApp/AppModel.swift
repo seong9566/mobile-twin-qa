@@ -1373,7 +1373,7 @@ final class AppModel {
         case .state(let id, let state):
             runStates[id] = state
             switch state {
-            case .running:
+            case .preparing, .running:
                 runStartedAt[id] = runStartedAt[id] ?? .now
             case .finished, .held, .notRun:
                 runFinishedAt[id] = .now

@@ -2,6 +2,8 @@ import Foundation
 
 public enum ScenarioRunState: Codable, Equatable, Sendable {
     case waiting
+    /// 시나리오 직전 앱 데이터 초기화·재로그인 중.
+    case preparing
     case running(sessionID: String)
     case finished(sessionID: String, artemis: String)
     case held(reason: String)
@@ -15,6 +17,8 @@ public struct RunStateFile: Codable {
     public var order: [String]
     public var states: [String: ScenarioRunState]
     public var usage: Usage
+    /// 앱이 한 실행 준비 기록. 예전 run-state.json에는 없다.
+    public var prepare: PrepareResult?
 
     public init(
         plan: String,
@@ -22,7 +26,8 @@ public struct RunStateFile: Codable {
         server: String,
         order: [String],
         states: [String: ScenarioRunState],
-        usage: Usage
+        usage: Usage,
+        prepare: PrepareResult? = nil
     ) {
         self.plan = plan
         self.deviceSerial = deviceSerial
@@ -30,6 +35,40 @@ public struct RunStateFile: Codable {
         self.order = order
         self.states = states
         self.usage = usage
+        self.prepare = prepare
+    }
+}
+
+/// 시나리오 직전 앱 데이터 초기화·재로그인에 쓰는 값(스펙 5.7·5.8).
+public struct ResetContext: Sendable {
+    public let package: String
+    public let launch: String
+    public let permissions: [String]
+    public let loginScript: URL
+    public let envURL: URL
+    public let roles: [String: AccountRole]
+    public let chosenRole: String?
+    /// LoginPlan.when이 .beforeScenario(id)면 그 id. 초기화 칸이 없어도 그 시나리오 앞에서 로그인한다.
+    public let loginBefore: String?
+
+    public init(
+        package: String,
+        launch: String,
+        permissions: [String],
+        loginScript: URL,
+        envURL: URL,
+        roles: [String: AccountRole],
+        chosenRole: String?,
+        loginBefore: String?
+    ) {
+        self.package = package
+        self.launch = launch
+        self.permissions = permissions
+        self.loginScript = loginScript
+        self.envURL = envURL
+        self.roles = roles
+        self.chosenRole = chosenRole
+        self.loginBefore = loginBefore
     }
 }
 
@@ -75,6 +114,7 @@ public actor RunOrchestrator {
     private let fileManager = FileManager.default
     private let plan: PlanDocument
     private let pollInterval: Duration
+    private let reset: ResetContext?
     public nonisolated let runDir: URL
     private let scenarios: [Scenario]
     private let shell: ShellRunner
@@ -106,7 +146,9 @@ public actor RunOrchestrator {
         tracesDir: URL?,
         adbPath: String?,
         pollInterval: Duration = .seconds(5),
-        clock: any Clock<Duration> = ContinuousClock()
+        clock: any Clock<Duration> = ContinuousClock(),
+        reset: ResetContext? = nil,
+        prepare: PrepareResult? = nil
     ) {
         let events = AsyncStream<RunEvent>.makeStream()
         let order = scenarios.map(\.id)
@@ -119,6 +161,7 @@ public actor RunOrchestrator {
         self.eventStream = events.stream
         self.plan = plan
         self.pollInterval = pollInterval
+        self.reset = reset
         self.runDir = runDir
         self.scenarios = scenarios
         self.shell = shell
@@ -128,7 +171,8 @@ public actor RunOrchestrator {
             server: server,
             order: order,
             states: Dictionary(uniqueKeysWithValues: order.map { ($0, .waiting) }),
-            usage: emptyUsage()
+            usage: emptyUsage(),
+            prepare: prepare
         )
         self.tracesDir = tracesDir
     }
@@ -232,6 +276,12 @@ public actor RunOrchestrator {
             continuation.yield(
                 .humanAction(id: scenario.id, note: scenario.gradeNote ?? "사람이 할 동작")
             )
+        }
+
+        if let failure = await resetIfNeeded(scenario) {
+            setState(.held(reason: "초기화 실패: \(failure)"), for: scenario.id)
+            currentID = nil
+            return .continued
         }
 
         let sessionID: String
@@ -368,6 +418,51 @@ public actor RunOrchestrator {
 
             try? await clock.sleep(for: pollInterval)
         }
+    }
+
+    /// 초기화 칸이 있거나 처음 로그인할 시나리오면 `POST /api/run` 전에 앱을 다시 준비한다. 실패하면 이유를 돌려준다.
+    private func resetIfNeeded(_ scenario: Scenario) async -> String? {
+        guard let reset, let adbPath,
+              scenario.resetsAppData || scenario.id == reset.loginBefore
+        else { return nil }
+        setState(.preparing, for: scenario.id)
+        func adb(_ args: [String], timeout: Duration) async -> (status: Int32, out: String)? {
+            try? await shell.run(adbPath, ["-s", deviceSerial] + args, timeout: timeout)
+        }
+        if scenario.resetsAppData {
+            guard let cleared = await adb(["shell", "pm", "clear", reset.package], timeout: .seconds(30)),
+                  cleared.status == 0
+            else { return "앱 데이터를 지우지 못했어요" }
+            // 개별 권한 실패는 실패가 아니다(스펙 5.7). adb가 끊기면 다음 명령에서 드러난다.
+            for permission in reset.permissions {
+                _ = await adb(["shell", "pm", "grant", reset.package, permission], timeout: .seconds(30))
+            }
+        }
+        guard let launched = await adb(["shell", "am", "start", "-n", reset.launch], timeout: .seconds(20)),
+              launched.status == 0
+        else { return "앱을 실행하지 못했어요" }
+        guard PlanDocument.needsLogin(scenario) else { return nil }
+        guard let roleKey = LoginPlan.role(for: scenario, chosenRole: reset.chosenRole, roles: reset.roles),
+              let role = reset.roles[roleKey]
+        else { return "로그인할 역할이 없어요" }
+        let arguments = [
+            reset.loginScript.path, deviceSerial, reset.envURL.path, role.idEnv, role.passwordEnv,
+            "--tap", "로그인", "--wait", "50",
+        ]
+        for attempt in 0..<2 {
+            guard let result = try? await shell.run("/bin/bash", arguments, timeout: .seconds(120)) else {
+                return "로그인이 120초 안에 끝나지 않았어요"
+            }
+            switch LoginOutcome.interpret(status: result.status, output: result.out, freshInstallOrReset: scenario.resetsAppData) {
+            case .loggedIn, .alreadyLoggedIn:
+                return nil
+            case .retryOnce(let message):
+                if attempt == 1 { return message }
+            case .failed(let message):
+                return message.isEmpty ? "로그인하지 못했어요" : message
+            }
+        }
+        return "로그인하지 못했어요"
     }
 
     private func setState(_ state: ScenarioRunState, for id: String) {

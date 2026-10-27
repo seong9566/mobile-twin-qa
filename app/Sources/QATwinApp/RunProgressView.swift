@@ -270,6 +270,12 @@ struct RunProgressView: View {
         case .waiting:
             Label("대기", systemImage: "circle.fill")
                 .foregroundStyle(Color.qaTertiaryText)
+        case .preparing:
+            HStack(spacing: 6) {
+                SwiftUI.ProgressView().controlSize(.small)
+                Text("초기화 중")
+            }
+            .foregroundStyle(Color.qaAccentInk)
         case .running:
             HStack(spacing: 6) {
                 SwiftUI.ProgressView().controlSize(.small)
@@ -319,6 +325,7 @@ struct RunProgressView: View {
     private func tapeState(_ state: ScenarioRunState) -> TapeState {
         switch state {
         case .waiting: .idle
+        case .preparing: .running
         case .running: .running
         case .finished: .done
         case .held: .hold

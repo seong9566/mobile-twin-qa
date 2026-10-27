@@ -207,6 +207,7 @@ public struct PlanDocument: Sendable {
             var passCondition: String?
             var evidence: String?
             var runOptionsNote: String?
+            var resetsAppData = false
 
             for line in block {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -232,6 +233,8 @@ public struct PlanDocument: Sendable {
                     evidence = fieldValue(trimmed)
                 } else if trimmed.hasPrefix("- 실행 옵션:") {
                     runOptionsNote = fieldValue(trimmed)
+                } else if trimmed.hasPrefix("- 초기화:") {
+                    resetsAppData = fieldValue(trimmed).contains("앱 데이터")
                 }
             }
 
@@ -244,6 +247,7 @@ public struct PlanDocument: Sendable {
                     gradeNote: gradeNote,
                     account: account,
                     accountRoleKey: accountRoleKey,
+                    resetsAppData: resetsAppData,
                     precondition: precondition,
                     goal: goal,
                     passCondition: passCondition,
