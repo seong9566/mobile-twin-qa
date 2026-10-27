@@ -66,7 +66,7 @@ a{color:#0a4aa3}a:hover{color:#0956bb}
         <sc-if value="{{buildFailed}}" hint-placeholder-val="{{false}}">
           <div class="note note-fail" role="alert" style="align-items:center">
             <svg class="ico" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 2 20h20L12 3z"></path><path d="M12 10v4"></path><path d="M12 17h.01"></path></svg>
-            <span style="flex-grow:1"><b>빌드에 실패해 멈췄어요.</b> 아래 로그 끝부분을 보고 다시 시도하거나 목록으로 돌아가세요. 실행 폴더는 비어 있어 지워요.</span>
+            <span style="flex-grow:1"><b>빌드에 실패해 멈췄어요.</b> 아래 로그 끝부분을 보고 다시 시도하거나 목록으로 돌아가세요. 실행 폴더는 아직 만들지 않았어요.</span>
             <button class="btn" type="button" onClick="{{retryBuild}}">다시 시도</button>
             <a class="btn" href="Main.dc.html">목록으로</a>
           </div>
@@ -76,8 +76,8 @@ a{color:#0a4aa3}a:hover{color:#0956bb}
           <li class="tbl-r" style="grid-template-columns:20px 130px minmax(0,1fr) 52px">
             <svg class="ico" viewBox="0 0 24 24" role="img" aria-label="끝남" style="color:#1c7a3d;stroke-width:2.2"><path d="m5 12 4 4 10-10"></path></svg>
             <span style="font-weight:600">Artemis 서버</span>
-            <span>꺼져 있어서 띄웠어요 · <span class="mono">127.0.0.1:8100</span> 응답 · 앱을 닫으면 같이 꺼요</span>
-            <span style="font-size:12px;color:#5d636c;text-align:right">0:06</span>
+            <span>승인 시트에서 띄웠어요 · <span class="mono">127.0.0.1:8100</span> 응답 중 · 앱을 닫으면 같이 꺼요</span>
+            <span style="font-size:12px;color:#5d636c;text-align:right">0:00</span>
           </li>
           <li class="tbl-r" style="grid-template-columns:20px 130px minmax(0,1fr) 52px">
             <svg class="ico" viewBox="0 0 24 24" role="img" aria-label="끝남" style="color:#1c7a3d;stroke-width:2.2"><path d="m5 12 4 4 10-10"></path></svg>
@@ -85,7 +85,7 @@ a{color:#0a4aa3}a:hover{color:#0956bb}
             <span><span class="mono">server/run.sh</span> 띄움 · <span class="mono">/health</span> 200 · 앱 빌드에는 <span class="mono">API_BASE_URL=http://192.168.0.12:5199</span></span>
             <span style="font-size:12px;color:#5d636c;text-align:right">0:09</span>
           </li>
-          <li class="tbl-r" style="grid-template-columns:20px 130px minmax(0,1fr) 52px;{{deviceRowStyle}}">
+          <li class="tbl-r" style="{{deviceRowStyle}}">
             <sc-if value="{{locked}}" hint-placeholder-val="{{true}}">
               <svg class="ico" viewBox="0 0 24 24" role="img" aria-label="사람이 할 일" style="color:#a15c00"><path d="M12 3 2 20h20L12 3z"></path><path d="M12 10v4"></path><path d="M12 17h.01"></path></svg>
               <span style="font-weight:600">기기 R5CT00DEMO1</span>
@@ -119,7 +119,7 @@ a{color:#0a4aa3}a:hover{color:#0956bb}
               <span style="font-size:12px;color:#b42318;text-align:right">1:42</span>
             </sc-if>
           </li>
-          <li class="tbl-r" style="grid-template-columns:20px 130px minmax(0,1fr) 52px;{{installRowStyle}}">
+          <li class="tbl-r" style="{{installRowStyle}}">
             <sc-if value="{{installRunning}}" hint-placeholder-val="{{false}}">
               <span class="spin"></span>
               <span style="font-weight:600">설치·실행</span>
@@ -151,8 +151,8 @@ a{color:#0a4aa3}a:hover{color:#0956bb}
           <button class="disc" type="button" onClick="{{toggleLog}}" aria-expanded="{{logOpen}}">
             <sc-if value="{{logOpen}}" hint-placeholder-val="{{true}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px"><path d="m6 9 6 6 6-6"></path></svg></sc-if>
             <sc-if value="{{logClosed}}" hint-placeholder-val="{{false}}"><svg class="ico" viewBox="0 0 24 24" aria-hidden="true" style="width:14px;height:14px"><path d="m9 6 6 6-6 6"></path></svg></sc-if>
-            준비 로그 — 명령 출력 끝부분 (값은 가려요)
-            <span style="margin-left:auto;font-weight:400;color:#8a9099">실행 폴더의 prepare.log에 남아요</span>
+            준비 로그 — 명령 출력 끝부분 (계정·키 값은 가려요)
+            <span style="margin-left:auto;font-weight:400;color:#8a9099">끝나면 실행 폴더 artifacts/prepare.log로 옮겨요</span>
           </button>
           <sc-if value="{{logOpen}}" hint-placeholder-val="{{true}}">
             <pre class="log" style="border-top:1px solid #e3e5e9">{{logText}}</pre>
@@ -173,7 +173,7 @@ a{color:#0a4aa3}a:hover{color:#0956bb}
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":800}}'>
-var LOG_LOCKED = '10:12:03  artemis   GET /api/devices → 연결 실패 → uv run artemis ui --port 8100 띄움\n10:12:09  artemis   GET /api/devices → 200 (R5CT00DEMO1 device)\n10:12:10  server    GET http://192.168.0.12:5199/health → 연결 실패 → server/run.sh 띄움\n10:12:19  server    GET /health → 200\n10:12:19  device    adb -s R5CT00DEMO1 shell dumpsys window → 잠금 화면 표시 중\n10:12:19  device    사람이 풀어야 해요 — 알림 보냄, 5초마다 다시 봐요';
+var LOG_LOCKED = '10:11:40  artemis   승인 시트에서 띄움 (uv run artemis ui --port 8100) · GET /api/devices → 200 (R5CT00DEMO1 device)\n10:12:03  artemis   GET /api/devices → 200 · 응답 중\n10:12:04  server    GET http://192.168.0.12:5199/health → 연결 실패 → server/run.sh 띄움\n10:12:13  server    GET /health → 200\n10:12:13  device    adb -s R5CT00DEMO1 shell dumpsys window → 잠금 화면 표시 중\n10:12:13  device    사람이 풀어야 해요 — 알림 보냄, 5초마다 다시 봐요';
 var LOG_RUNNING = LOG_LOCKED + '\n10:13:41  device    잠금 해제 · wifi: connected stec_5G · zen_mode 0\n10:13:41  build     설치본 abc1234 (.install.json) = HEAD abc1234, 변경 없음 → 건너뜀\n10:13:42  install   adb -s R5CT00DEMO1 install -r build/app/outputs/flutter-apk/app-debug.apk';
 var LOG_FAILED = LOG_LOCKED + '\n10:13:41  device    잠금 해제 · wifi: connected stec_5G · zen_mode 0\n10:13:41  build     HEAD def5678 ≠ 설치본 abc1234 → flutter build apk --debug --dart-define-from-file=$QA_APP_ENV\n10:15:23  build     lib/features/home/home_screen.dart:41:7: Error: The getter \'workChip\' isn\'t defined\n10:15:23  build     Gradle task assembleDebug failed with exit code 1\n10:15:23  build     종료 코드 1 → 멈춤';
 class Component extends DCLogic {
@@ -185,8 +185,8 @@ class Component extends DCLogic {
     return {
       title: st.failed ? '실행 준비 멈춤 · 4 / 7' : (locked ? '실행 준비 중 · 3 / 7 — 기기를 기다려요' : '실행 준비 중 · 5 / 7'),
       locked: locked, unlocked: !locked,
-      deviceRowStyle: locked ? 'background:#fff8e6' : '',
-      installRowStyle: running ? 'background:#f7f9fd' : '',
+      deviceRowStyle: 'grid-template-columns:20px 130px minmax(0,1fr) 52px' + (locked ? ';background:#fff8e6' : ''),
+      installRowStyle: 'grid-template-columns:20px 130px minmax(0,1fr) 52px' + (running ? ';background:#f7f9fd' : ''),
       buildWaiting: locked, buildSkipped: running, buildFailed: st.failed,
       installRunning: running, installWaiting: !running,
       recheck: function () { self.setState({ locked: false }); },

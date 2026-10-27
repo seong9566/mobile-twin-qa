@@ -37,17 +37,17 @@ QA 맥 앱(`app/`)의 "실행 준비"를 사람 손과 Claude Code 없이 앱이
 - 원본 repo의 git 추적 파일이 바뀐다.
 - 비밀값이 화면·로그·`prepare.log`·run-state·Claude 프롬프트에 나온다.
 - 계획에 적지 않은 기기 데이터 초기화를 앱이 한다.
-- 어느 단계든 끝나지 않는데 앱이 모른 채 기다린다(모든 단계에 시간 제한).
+- 어느 단계든 끝나지 않는데 앱이 모른 채 기다린다(사람 몫인 잠금 해제 대기를 빼고 모든 단계에 시간 제한).
 - 채팅으로 하던 것보다 클릭이 많아진다.
 
 ## 3. 제약
 
 - 원본 repo는 읽기 전용. 빌드로 바뀌는 것은 git이 무시하는 파일뿐이어야 한다(AGENTS.md "원본 repo"). 빌드 전후 `git status --porcelain`·`git diff | shasum`을 비교하는 기존 규칙을 앱이 그대로 지킨다.
-- 비밀값은 프로젝트 폴더의 `.env`에만 있다. 앱은 값을 `SecretRedactor`로 가린 뒤에만 화면·로그에 보인다.
+- 비밀값은 프로젝트 폴더의 `.env`에만 있다. 앱은 값을 `SecretRedactor`로 가린 뒤에만 화면·로그에 보인다(가릴 키의 기준은 5.2).
 - Artemis 쓰기 호출(`POST /api/run`·`/api/stop`)은 승인 뒤 앱만 한다. 준비 단계는 `GET /api/devices`만 부른다. Artemis 서버 프로세스를 띄우는 것은 API 쓰기가 아니므로 승인 전(승인 시트를 열 때)에도 한다.
-- 앱이 띄우는 셸 명령은 `/bin/bash -lc "<명령>"`으로 실행해 로그인 셸의 PATH(`uv`·`flutter`·`adb`)를 쓴다. GUI 앱의 PATH는 터미널과 다르다.
+- 앱이 띄우는 셸 명령은 사용자의 로그인 셸로 `"$SHELL" -lic '<명령>'`처럼 실행한다(`-l`과 `-i`를 같이 줘야 zsh가 `.zprofile`과 `.zshrc`를 모두 읽는다. README가 `ARTEMIS_HOME`을 `~/.zshrc`에 넣으라 하고 `uv`·`flutter`·`adb` PATH도 보통 거기 있다). stdin은 `/dev/null`. `ARTEMIS_HOME`·`ARTEMIS_TRACES_DIR`·`QA_APP_ENV`는 지금처럼 앱 설정값을 환경 변수로 직접 넣는다. `adb`는 지금처럼 설정 경로나 기본 설치 경로의 실행 파일을 바로 부른다.
 - Artemis 포트는 설정의 Artemis 주소를 따른다(기본 8100). 8000은 건드리지 않는다.
-- 판정·기록·지식 규칙의 정본은 스킬(`.claude/skills/qa-run/SKILL.md`)과 `AGENTS.md`다. 준비를 앱이 맡게 되면 스킬의 `앱 실행 모드: 준비` 절은 지우고 "준비는 앱이 한다"고 적는다.
+- 판정·기록·지식 규칙의 정본은 스킬(`.claude/skills/qa-run/SKILL.md`)과 `AGENTS.md`다. 준비를 앱이 맡게 되면 스킬의 `앱 실행 모드: 준비` 절은 지우고 "준비는 앱이 한다"고 적는다. 채팅으로 돌리는 경로(스킬 2·3단계)는 그대로 둔다.
 - macOS 26+, SwiftUI, 기존 `QATwinCore`/`QATwinApp` 구조 위에 더한다.
 
 ## 4. 사용자가 정한 것 (2026-10-27 인터뷰)
@@ -70,18 +70,25 @@ QA 맥 앱(`app/`)의 "실행 준비"를 사람 손과 Claude Code 없이 앱이
 ### 4.6 화면
 목업 확정: https://claude.ai/artifact/Fy51H7ZaUCya3uQBhKpjYp 세 번째 줄, 원본은 `docs/superpowers/mockups/qa-mac-app/Approval2.dc.html`(3b)·`Prepare.dc.html`(4a). 지어낸 데이터.
 
-- **3b 실행 승인**: 기기 목록에 켜진 에뮬레이터. 서버 선택 아래 "준비 점검" 묶음(Artemis·테스트 서버·기기·빌드·설치·로그인). 테스트 서버는 "시작하면 띄워요", Artemis는 기기 목록에 필요하므로 시트를 열 때 바로 띄우고 "꺼져 있어서 띄웠어요"로 보인다(목업 문구 "시작하면 띄워요"는 이렇게 바뀐다, 5.3). 기기 잠김은 사람 몫으로 표시하고 "다시 확인". 빌드는 설치본 커밋 비교로 "건너뜀" 또는 "다시 빌드", "그래도 다시 빌드" 체크. 계정 칸은 "테스트 env"로 바뀌고 키마다 쓰임(빌드/로그인)을 보이며 "원본 .env에서 가져오기…" 버튼이 있다. 잠금·키 없음·서버 미응답(띄울 명령 없을 때)·동의 없음이 "시작"을 막는다.
-- **4a 준비 진행**: Claude 단계 화면 대신 항목 체크리스트(Artemis 서버 → 테스트 서버 → 기기 → 빌드 → 설치·실행 → 로그인 → 시나리오). 항목마다 상태 아이콘·한 줄 상세·경과 시간. 기기 잠김에서는 그 행만 노랗게 멈추고 "다시 확인". 실패하면 그 행이 빨갛게 되고 위에 노트(오류 끝부분 + "다시 시도" / "목록으로"). 아래에 "준비 로그" 접이식(명령 출력 끝부분, 값 가림, 실행 폴더에 남김). 상태 막대에 경과 시간·Claude 비용 $0.
+- **3b 실행 승인**: 기기 목록에 켜진 에뮬레이터. 서버 선택 아래 "준비 점검" 묶음(Artemis·테스트 서버·기기·빌드·설치·로그인). 테스트 서버는 "시작하면 띄워요", Artemis는 기기 목록에 필요하므로 시트를 열 때 바로 띄우고 "꺼져 있어서 띄웠어요"로 보인다. 기기 잠김은 사람 몫으로 표시하고 "다시 확인". 빌드는 설치본 기록 비교로 "건너뜀" 또는 "다시 빌드", "그래도 다시 빌드" 체크. 로그인 행은 역할 선택이다(5.7). 계정 칸은 "테스트 env"로 바뀌고 키마다 쓰임(빌드/로그인)을 보이며 "원본 .env에서 가져오기…" 버튼이 있다. 잠금·로그인 키 없음·서버 미응답(띄울 명령 없을 때)·동의 없음이 "시작"을 막는다.
+- **4a 준비 진행**: Claude 단계 화면 대신 항목 체크리스트(Artemis 서버 → 테스트 서버 → 기기 → 빌드 → 설치·실행 → 로그인 → 시나리오). 시트에서 이미 끝난 항목(띄운 Artemis, 건너뛰는 빌드)은 바로 체크된 채 보인다. 항목마다 상태 아이콘·한 줄 상세·경과 시간. 기기 잠김에서는 그 행만 노랗게 멈추고 "다시 확인". 실패하면 그 행이 빨갛게 되고 위에 노트(오류 끝부분 + "다시 시도" / "목록으로"). 아래에 "준비 로그" 접이식(명령 출력 끝부분, 값 가림). 상태 막대에 경과 시간·Claude 비용 $0.
 
 ### 4.7 순서
-처음 코드 검토에서 찾은 작은 수정 6건(사이드바 같은 날짜 계획 구분, 저장 안 한 수정 유실, 준비·판정 가짜 진행, 준비·판정 기록 없음, Artemis 미응답 문구, 통과 시나리오 메모)은 이 설계와 **별도 PR로 먼저** 고친다. 그중 준비 쪽 두 건(가짜 진행·기록 없음)은 이 설계로 준비 단계가 바뀌면 자연히 사라지므로 그 PR에서는 판정 단계만 다룬다.
+처음 코드 검토에서 찾은 작은 수정 6건(사이드바 같은 날짜 계획 구분, 저장 안 한 수정 유실, 준비·판정 가짜 진행, 준비·판정 기록 없음, Artemis 미응답 문구, 통과 시나리오 메모)은 이 설계와 **별도 PR로 먼저** 고친다(PR #19). 그중 준비 쪽 두 건(가짜 진행·기록 없음)은 이 설계로 준비 단계가 바뀌면 자연히 사라지므로 그 PR에서는 판정 단계만 다룬다.
 
 ## 5. 내가 정한 것 (Claude의 판단 — 사용자가 뒤집을 수 있음)
 
 ### 5.1 `project.yaml` 확장
-`environments`의 각 서버 이름 아래에 하위 키를 더한다(최상위 키는 양식 그대로, AGENTS.md "파일 형식").
+`environments`의 각 서버 이름 아래와 `apps.android`에 하위 키를 더한다(최상위 키는 양식 그대로, AGENTS.md "파일 형식").
 
 ```yaml
+apps:
+  android:
+    package: com.example.app
+    launch: com.example.app/.MainActivity
+    permissions:                               # 설치·초기화 뒤 pm grant할 런타임 권한. AndroidManifest의 uses-permission 중 런타임 권한만
+      - android.permission.ACCESS_FINE_LOCATION
+      - android.permission.POST_NOTIFICATIONS
 environments:
   default: local
   local:
@@ -99,85 +106,93 @@ build:
 
 - `build.android`의 env 파일 경로는 `$QA_APP_ENV`로 쓴다. 앱이 빌드 직전에 절대 경로를 넣는다.
 - 빌드 명령에 `$QA_APP_ENV`가 없는 프로젝트(지금 등록된 둘 다 소스의 `.env`를 직접 읽는다)는 명령을 그대로 실행하되, 승인 시트의 빌드 행에 "빌드가 원본 .env를 읽어요 — 고른 서버가 빌드에 반영되지 않아요"를 경고로 보인다(시작은 막지 않는다). 이 작업에서 `company/stsp_patrol`·`personal/departure-assistant`의 `project.yaml`을 `$QA_APP_ENV` 방식으로 옮긴다(stsp_patrol은 지금 `TEST_*` 계정값이 APK에 구워지는 상태라 더 그렇다).
-- `templates/project.yaml`에 이 예시를 넣고, `qa-init`이 소스(`run.sh`·README·CI·health 컨트롤러)를 읽어 채우게 한다. 못 찾으면 `# 미확인`.
+- `templates/project.yaml`에 이 예시를 넣고, `qa-init`이 소스(`run.sh`·README·CI·health 컨트롤러·AndroidManifest)를 읽어 채우게 한다. 못 찾으면 `# 미확인`.
 - `{{mac_ip}}`는 앱이 기본 경로 인터페이스의 IPv4로 바꾼다. `.env` 값·`health`·`vars` 어디서든 쓸 수 있다.
 
 ### 5.2 테스트 env 파일 규칙
 - 파일은 지금 계정용으로 쓰는 `<category>/<project>/.env` 그대로다(이미 git 제외). 여기에 서버 주소·빌드용 키(`API_BASE_URL`·`NAVER_MAP_CLIENT_ID` 등)·계정(`TEST_USER_ID` 등)을 함께 둔다.
 - 빌드에 넘길 때 앱이 임시 파일을 만든다: `.env` 전체에서 `accounts.*.id_env`·`password_env`에 적힌 키를 **뺀** 것 + 고른 서버의 `vars`로 덮어쓰기 + `{{mac_ip}}` 치환. 계정 값을 APK에 굽지 않기 위해서다. 임시 파일은 앱 scratch 폴더에 0600으로 만들고 빌드가 끝나면 지운다.
+- **가릴 값의 기준**: 화면·로그·run-state에 보이기 전에 가리는 `.env` 값은 (1) `accounts`에 적힌 키의 값과 (2) 키 이름에 `KEY`·`SECRET`·`TOKEN`·`PASS`(`PASSWORD`·`PW` 포함)가 든 키의 값이다(대소문자 무시). `API_BASE_URL` 같은 서버 주소는 가리지 않아 준비 로그에 그대로 보인다. 지금처럼 `.env`의 모든 값을 가리면 주소까지 `****`가 돼 로그를 읽을 수 없다. `SecretRedactor` 호출부(`stageSecretValues`·`runSecretValues`)가 쓰는 값 목록을 이 기준으로 좁힌다.
 - 승인 시트·설정의 "테스트 env" 칸은 이 키들을 보인다: `accounts`의 키(쓰임 "로그인", 없으면 지금처럼 시작을 막는다) + 프로젝트 `.env`에 이미 있는 그 밖의 키(쓰임 "빌드") + 원본 repo의 `.env.example`(있을 때)에 적혔는데 `.env`에 없는 키(쓰임 "빌드", 경고만). 어느 키가 빌드에 꼭 필요한지는 앱이 알 수 없으므로 "빌드" 키는 없어도 시작을 막지 않는다.
-- "원본 .env에서 가져오기…": `project.local.yaml`의 `source_path`(없으면 `.cache/repos/<project>`)에서 `.env`를 찾아 `git check-ignore`로 git 제외 파일인지 확인한다(추적 파일이면 거부하고 이유를 보인다). 원본 `.env`에 있는 **모든 키 이름**을 목록으로 보여 주고(값은 안 보임, 프로젝트 `.env`에 없는 키가 기본 체크) 고른 키를 `.env`에 `upsert`한다. `.env.example`이 없는 프로젝트(stsp_patrol)도 이 목록으로 빌드 키를 가져올 수 있다. 원본 repo의 `.env`가 다른 경로(예: `app/.env`)에 있으면 `project.yaml` `build.env_source: app/.env`로 가리킨다.
+- "원본 .env에서 가져오기…": `project.local.yaml`의 `source_path`(없으면 `.cache/repos/<project>`)에서 `.env`를 찾는다. `git ls-files --error-unmatch`로 추적 파일이면 거부하고 이유를 보인다(추적 파일의 값은 비밀이 아니거나 복사해선 안 되는 것이다). 원본 `.env`에 있는 **모든 키 이름**을 목록으로 보여 주되(값은 안 보임) 기본 체크는 `.env.example`에 있는 키(없으면 아무것도 체크하지 않음)로 좁힌다. 원본의 모든 비밀이 기본으로 들어와 빌드 env에 구워지지 않게 하기 위해서다. 고른 키를 `.env`에 `upsert`한다. `.env.example`이 없는 프로젝트(stsp_patrol)도 이 목록에서 직접 골라 가져온다. 원본 repo의 `.env`가 다른 경로(예: `app/.env`)에 있으면 `project.yaml` `build.env_source: app/.env`로 가리킨다.
 
 ### 5.3 Artemis 서버
 - 점검: 설정의 Artemis 주소로 `GET /api/devices`.
-- 없으면 `cd "$ARTEMIS_HOME" && uv run artemis ui --port <주소의 포트>`를 앱이 자식 프로세스 그룹으로 띄운다. 60초 안에 응답하지 않으면 실패.
-- 기기 목록이 `/api/devices`에서 오므로, 승인 시트를 열 때 점검에서 꺼져 있으면 **그 자리에서 바로 띄운다**(시작을 누르기 전). 시트의 Artemis 행은 "꺼져 있어서 띄우는 중…" → "띄웠어요 · 응답"으로 바뀌고, 응답하면 기기 목록을 읽는다. 띄우지 못하면 기기 행에 지금처럼 "Artemis 서버에 연결하지 못했어요"와 "다시 확인".
+- 없으면 `cd "$ARTEMIS_HOME" && uv run artemis ui --port <주소의 포트>`를 앱이 자식 프로세스 그룹으로 띄운다. 60초 안에 응답하지 않으면 실패. 주소의 호스트가 루프백(`127.0.0.1`·`localhost`)이 아니면 띄우지 않고 "다른 기기의 Artemis라 띄울 수 없어요"로 사람 몫에 둔다.
+- 기기 목록이 `/api/devices`에서 오므로, 승인 시트를 열 때 점검에서 꺼져 있으면 **그 자리에서 바로 띄운다**(시작을 누르기 전). 시트의 Artemis 행은 "꺼져 있어서 띄우는 중…" → "꺼져 있어서 띄웠어요 · 응답"으로 바뀌고, 응답하면 기기 목록을 읽는다. 띄우지 못하면 기기 행에 지금처럼 "Artemis 서버에 연결하지 못했어요"와 "다시 확인". 준비 화면의 Artemis 행은 이미 끝난 것으로 바로 체크된다.
 - 앱이 띄운 프로세스는 앱이 끝날 때 함께 끝낸다. 외부(터미널)에서 띄운 것은 건드리지 않는다.
 - 출력은 `~/Library/Application Support/QATwin/artemis.log`에 남기고 준비 로그에는 끝부분만 보인다.
 - `artemis doctor`는 돌리지 않는다. 기기·키 문제는 `/api/devices`와 실행 오류로 드러난다.
 
 ### 5.4 테스트 서버
 - `health`가 있으면 `GET`으로 2xx 확인. 성공하면 끝.
-- 실패하고 `start`가 있으면 `cwd`(소스 루트 기준)에서 `start`를 자식 프로세스 그룹으로 띄우고 `start_timeout`초(기본 60) 동안 `health`를 폴링한다. 시간 안에 응답 없으면 실패(프로세스는 끝낸다).
+- 실패하고 `start`가 있으면 `cwd`(소스 루트 기준)에서 `start`를 자식 프로세스 그룹으로 띄우고 `start_timeout`초(기본 60) 동안 `health`를 폴링한다. 시간 안에 응답 없으면 실패(프로세스는 끝낸다). 폴링 중 그 프로세스가 먼저 끝나면 기다리지 않고 바로 실패로 보고 출력 끝부분을 보인다.
 - 실패하고 `start`가 없으면 사람 몫이다. 승인 시트에서는 "시작"을 막고(이유: 서버가 응답하지 않아요, 직접 띄워 주세요), "다시 확인"으로 풀린다.
 - `health`가 없으면 이 항목은 생략하고 행도 보이지 않는다.
 - 앱이 띄운 서버도 앱이 끝날 때 함께 끝낸다. 준비를 취소하거나 실행이 끝나도 끄지 않는다(다음 실행에서 그대로 쓴다).
 
 ### 5.5 기기 점검
 - `adb -s <serial>`로 본다: 연결(`get-state`), 화면 켜짐·잠금(`dumpsys`), Wi-Fi(`cmd wifi status`, 에뮬레이터 `emulator-*`는 생략), 방해 금지(`settings get global zen_mode`), 알림 권한(패키지가 설치돼 있을 때만).
-- 막는 것(blocker): 연결 안 됨, 잠김, Wi-Fi 끊김(에뮬레이터 제외). 경고만(진행은 함): 방해 금지 켜짐, 알림 권한 없음.
+- 막는 것(blocker): 연결 안 됨, 잠김, Wi-Fi 끊김(에뮬레이터 제외). 경고만(진행은 함): 방해 금지 켜짐, 알림 권한 없음. Wi-Fi를 blocker로 둔 것은 사용자 결정이 아니라 내 판단이다(끊긴 채 시작하면 첫 시나리오부터 서버에 닿지 못해 전부 환경 실패가 된다).
 - 잠겨 있으면 macOS 알림을 보내고 5초마다 다시 본다. 사람이 "다시 확인"을 누르지 않아도 풀리면 이어서 간다. 기다리는 동안 시간 제한은 없다(사람 몫).
 - 기기 목록은 지금처럼 Artemis `/api/devices`에서 온다. 에뮬레이터는 `model`이 없을 수 있으니 serial이 `emulator-`로 시작하면 "에뮬레이터 <AVD 이름>"으로 보인다(`adb -s <serial> emu avd name`).
 
 ### 5.6 빌드 건너뛰기
-- 설치 기록 `<category>/<project>/.install.json`(git 제외에 추가): `{ "serial", "package", "commit", "dirty", "env_sha256", "apk_sha256", "at" }`. `env_sha256`은 빌드에 넘긴 임시 env 파일 내용(5.2, `{{mac_ip}}` 치환 뒤)의 해시다. `$QA_APP_ENV`를 안 쓰는 프로젝트는 빈 문자열. 설치가 끝날 때마다 쓴다.
-- 건너뛰는 조건(전부 참): 기록이 있다 ∧ 같은 serial ∧ 기록의 `dirty`가 false ∧ 지금 소스가 dirty가 아니다 ∧ 기록의 `commit` = 지금 `HEAD` ∧ 기록의 `env_sha256` = 이번에 만들 env의 해시(서버를 바꾸거나 맥 IP가 바뀌면 다시 빌드한다) ∧ 기기에 패키지가 설치돼 있다(`pm path <package>`). 하나라도 아니면 빌드·설치한다. 승인 시트에 어느 조건이 어긋났는지 한 줄로 보인다(예: "설치본 abc1234 ≠ 소스 def5678", "서버 설정이 바뀜").
+- 설치 기록 `<category>/<project>/.install.json`(git 제외에 추가). 기기 serial별로 한 항목: `{ "<serial>": { "package", "commit", "dirty", "env_sha256", "at" } }`. `env_sha256`은 빌드에 넘긴 임시 env 파일 내용(5.2, `{{mac_ip}}` 치환 뒤)의 해시다. `$QA_APP_ENV`를 안 쓰는 프로젝트는 빈 문자열. 설치가 끝날 때마다 그 serial 항목을 쓴다. 기기 둘을 번갈아 써도 서로의 기록을 지우지 않는다.
+- 건너뛰는 조건(전부 참): 그 serial의 기록이 있다 ∧ 기록의 `dirty`가 false ∧ 지금 소스가 dirty가 아니다 ∧ 기록의 `commit` = 지금 `HEAD` ∧ 기록의 `env_sha256` = 이번에 만들 env의 해시(서버를 바꾸거나 맥 IP가 바뀌면 다시 빌드한다) ∧ 기기에 패키지가 설치돼 있다(`pm path <package>`). 하나라도 아니면 빌드·설치한다. 승인 시트에 어느 조건이 어긋났는지 한 줄로 보인다(예: "설치본 abc1234 ≠ 소스 def5678", "서버 설정이 바뀜").
 - "그래도 다시 빌드"를 켜면 조건과 상관없이 빌드한다.
 - 빌드 전후 `git -C <소스> status --porcelain`과 `git diff | shasum`을 비교해 추적 파일이 바뀌었으면 실패로 멈춘다(되돌리지 않는다).
-- 빌드 명령은 소스 루트에서 `/bin/bash -lc`로, `QA_APP_ENV`를 환경 변수로 넣어 실행한다.
+- 빌드 명령은 소스 루트에서 로그인 셸(3절)로, `QA_APP_ENV`를 환경 변수로 넣어 실행한다.
 
 ### 5.7 설치 · 앱 실행 · 로그인
-- 설치: `adb -s <serial> install -r <build.android_apk>`. 실행: `adb shell am start -n <apps.android.launch>`.
-- 로그인 역할은 승인 시트의 "로그인 역할" 선택(`accounts`의 역할 키 목록)으로 정한다. 기본값은 첫 포함 시나리오의 `계정` 칸 백틱 역할 키, 그것이 없으면(지금 stsp_patrol 계획처럼 ``계정: 근무자 (…)``만 적힌 경우) `accounts`가 하나면 그것, 여럿이면 첫 번째. 사용자가 바꿀 수 있고 run-state의 `prepare.loginRole`에 남는다. `accounts`가 비었거나 로그인하는 시나리오가 하나도 없으면 로그인 항목은 생략한다.
-- `tools/android-login.sh`에 `--tap <글자>` 옵션을 더한다(기본 "로그인"): 입력·확인 뒤 그 글자가 든 clickable 요소를 탭하고 3초 뒤 다시 덤프해 아이디·비밀번호 칸이 사라졌으면 0, 남아 있으면 5로 끝내며 화면에 보이는 오류 문구(아이디가 들어 있으면 뺌)를 출력한다. 앱은 이 스크립트를 그대로 부른다. 값은 지금처럼 스크립트가 `.env`에서 읽는다.
-- 앱을 띄운 뒤 로그인 화면을 못 찾으면(종료 코드 4): 빌드·설치를 건너뛴 경우에만 "이미 로그인돼 있음"으로 보고 진행한다. 새로 설치했거나 앱 데이터를 초기화한 직후면 로그인됐을 리 없으므로 실패로 멈춘다(상세: "로그인 화면을 찾지 못했어요 — 권한 요청 창이나 온보딩이 가리고 있을 수 있어요"). 네트워크 오류 문구면 한 번만 다시 누른다.
+- 설치: `adb -s <serial> install -r <build.android_apk>`. 설치 직후 `apps.android.permissions`의 권한을 `pm grant <package> <권한>`으로 준다(목록이 비었으면 생략, 한 권한이 실패해도 멈추지 않고 로그에 남긴다). 실행: `adb shell am start -n <apps.android.launch>`.
+- `tools/android-login.sh`에 `--tap <글자>` 옵션을 더한다(기본값 "로그인"). **옵션이 없으면 지금과 똑같이 동작한다**(채팅 경로와 스킬 2단계 3번은 바뀌지 않는다). 옵션이 있으면 입력·확인 뒤 그 글자가 든 clickable 요소를 탭하고 3초 뒤 다시 덤프해 아이디·비밀번호 칸이 사라졌으면 0, 남아 있으면 5로 끝내며 화면에 보이는 오류 문구(아이디가 들어 있으면 뺌)를 출력한다. 로그인 화면을 처음부터 찾지 못한 경우는 지금의 4 대신 **새 종료 코드 7**로 끝낸다(4는 "찾았는데 입력 중에 칸이 사라짐·포커스 안 됨"으로 남긴다). 앱은 이 스크립트를 `--tap`으로 부른다. 값은 지금처럼 스크립트가 `.env`에서 읽는다.
+- **로그인 규칙** (준비 단계와 5.8의 초기화 뒤가 같은 규칙을 쓴다)
+
+  | 물음 | 규칙 |
+  | --- | --- |
+  | 언제 | 처음으로 로그인이 필요한 포함 시나리오(`계정` 칸이 있고 `로그아웃 상태`가 아닌 것, `PlanDocument.needsLogin`) 직전. 그것이 첫 시나리오면 준비 단계의 "로그인" 항목으로 보이고, 아니면(예: 로그아웃 상태 시나리오가 먼저) 실행 루프가 그 시나리오 앞에서 5.8의 경로(앱 실행 → 로그인)로 한다. 로그인이 필요한 시나리오가 없거나 `accounts`가 비었으면 하지 않는다 |
+  | 어느 역할 | 그 시나리오의 `계정` 칸에 백틱 역할 키가 있으면 그 역할. 없으면 승인 시트의 "로그인 역할" 선택. 시트의 기본값은 처음 로그인하는 시나리오의 역할 키 → 없으면 `accounts`가 하나면 그것 → 여럿이면 첫 번째. 사용자가 바꿀 수 있고 run-state의 `prepare.loginRole`에 남는다 |
+  | 종료 코드 7 (로그인 화면 없음) | 빌드·설치를 건너뛴 준비 단계에서만 "이미 로그인돼 있음"으로 보고 진행. 새로 설치했거나 앱 데이터를 초기화한 직후면 로그인됐을 리 없으므로 실패(상세: "로그인 화면을 찾지 못했어요 — 권한 요청 창이나 온보딩이 가리고 있을 수 있어요") |
+  | 종료 코드 4·5·2·3·6 | 모두 실패. 5의 출력에 "네트워크"·"연결"·"network"가 들어 있으면 앱이 한 번만 다시 부른다 |
+  | 실패했을 때 | 준비 단계면 멈춤(4.3). 초기화 뒤면 그 시나리오 보류(5.8) |
 
 ### 5.8 시나리오별 초기화
-- 계획 양식(`templates/test_plan.md`) 시나리오 블록에 `- 초기화: 앱 데이터` 줄을 더한다. 없거나 `없음`이면 하지 않는다. `qa-plan` 스킬에 "빈 상태에서 시작해야 하는 시나리오에만 적는다"를 더한다.
+- 계획 양식(`templates/test_plan.md`) 시나리오 블록에 `- 초기화: 앱 데이터` 줄을 더한다. 없거나 `없음`이면 하지 않는다. `qa-plan` 스킬에 "빈 상태에서 시작해야 하는 시나리오에만 적는다. 초기화하면 런타임 권한도 지워지므로 `apps.android.permissions`에 없는 권한은 goal에서 '허용'을 누르게 적는다"를 더한다.
 - `PlanDocument`가 `resetsAppData: Bool`로 읽는다. 목록 확인 표의 "사람 개입" 칸 옆에 "초기화" 칩, 승인 시트 시나리오 줄 아래 "<ID> 앞에서 앱 데이터를 초기화해요"를 보인다.
-- 실행 루프(`RunOrchestrator`)가 그 시나리오 직전에 `pm clear <package>` → `am start` → (그 시나리오에 계정이 있으면) 로그인 → `POST /api/run`. 진행 화면 그 행에 "초기화 중" 상태를 보이고, run-state에는 `.running` 앞 단계로 남긴다(`ScenarioRunState`에 `preparing` 추가).
-- 초기화 뒤 로그인은 승인 시트에서 고른 역할로 한다(5.7). 초기화·로그인이 실패하면(로그인 화면을 못 찾은 종료 코드 4 포함) 그 시나리오를 보류(환경, 사유 "초기화 실패: <이유>")로 두고 다음으로 간다. 뒤 시나리오가 이것에 의존하면 지금 규칙대로 보류.
+- 실행 루프(`RunOrchestrator`)가 그 시나리오 직전에 `pm clear <package>` → `pm grant`(5.7) → `am start` → (그 시나리오에 로그인이 필요하면, 5.7의 역할 규칙으로) 로그인 → `POST /api/run`. 진행 화면 그 행에 "초기화 중" 상태를 보이고, run-state에는 `.running` 앞 단계로 남긴다(`ScenarioRunState`에 `preparing` 추가).
+- 초기화·권한·로그인이 실패하면(종료 코드 7·4 포함) 그 시나리오를 보류(환경, 사유 "초기화 실패: <이유>")로 두고 다음으로 간다. 뒤 시나리오가 이것에 의존하면 지금 규칙대로 보류.
 
 ### 5.9 승인 시트와 준비 화면의 흐름
 - 승인 시트가 열리면 점검을 한 번 돌린다(행마다 스피너 → 결과). Artemis가 꺼져 있으면 이때 띄운다(5.3). "다시 확인"은 전부 다시 본다. 시트를 연 채 두면 기기 잠금만 5초마다 다시 본다.
 - 시트에 "로그인 역할" 선택이 생긴다(5.7). `accounts`가 비었으면 보이지 않는다.
 - "시작" 조건: 로그인 키 전부 있음 ∧ 기기 연결·잠금 해제·Wi-Fi ∧ (서버 health 실패면 `start`가 있음) ∧ (회사면) 동의. 빌드 키 없음·방해 금지·알림 권한·`$QA_APP_ENV` 미사용은 경고만.
-- "시작" → 실행 폴더 생성 → `AppPhase.preparing(runDir:)` → 준비 화면. 항목 순서: Artemis 서버 → 테스트 서버 → 기기 → 빌드 → 설치·실행 → 로그인 → 시나리오. 시트에서 "건너뜀"으로 본 항목은 화면에서도 건너뜀으로 바로 체크된다.
+- "시작" → 실행 이름(`yyyy-mm-dd-HHmm`, 지금 `makeRunDirectory`의 규칙)을 정하되 **폴더는 아직 만들지 않는다** → `AppPhase.preparing(runName:)` → 준비 화면. 항목 순서: Artemis 서버 → 테스트 서버 → 기기 → 빌드 → 설치·실행 → 로그인 → 시나리오. 시트에서 이미 끝난 항목(띄운 Artemis, 건너뛰는 빌드)은 바로 체크된 채 보인다.
 - 항목 상태: 대기 / 진행 중 / 끝남 / 건너뜀 / 사람 대기 / 실패. 상세 한 줄과 경과 시간.
-- 준비 로그: 명령마다 시각·항목·명령·출력 끝부분. 화면에는 마지막 200줄, 값은 `SecretRedactor`로 가린다. 전체(가린 것)를 `<실행 폴더>/artifacts/prepare.log`에 쓴다(artifacts는 git 제외).
-- 끝나면 바로 지금의 실행 루프(`RunOrchestrator.start`)로 넘어간다. 진행 화면 위쪽에 "준비 완료 · 1:38" 한 줄과 준비 로그 접이식을 남긴다(지금의 "준비 단계 Claude Code 출력" 자리).
-- 취소("준비 취소…" 확인 뒤): 지금 도는 자식 프로세스 그룹을 끝내고, 실행 폴더가 비었으면 지우고, 목록 확인으로 돌아간다. 앱이 띄운 Artemis·테스트 서버는 끄지 않는다.
-- 실패: 그 항목이 빨갛게 되고 위에 노트(마지막 30줄 + "다시 시도" / "목록으로"). "다시 시도"는 실패한 항목부터 다시 한다. "목록으로"는 취소와 같다.
+- 준비 로그: 명령마다 시각·항목·명령·출력 끝부분. 준비하는 동안은 `~/Library/Application Support/QATwin/prepare-logs/<project>__<실행 이름>.log`에 쓴다(값은 5.2 기준으로 가린다). 화면에는 마지막 200줄.
+- 준비가 끝나면 그때 실행 폴더를 만들고(`qa-run` 3단계의 "첫 시나리오를 보내기 직전에 만든다"와 같다) 로그를 `<실행 폴더>/artifacts/prepare.log`로 옮긴 뒤 지금의 실행 루프(`RunOrchestrator.start`)로 넘어간다. 진행 화면 위쪽에 "준비 완료 · 1:38" 한 줄과 준비 로그 접이식을 남긴다(지금의 "준비 단계 Claude Code 출력" 자리).
+- 취소("준비 취소…" 확인 뒤): 지금 도는 자식 프로세스 그룹을 끝내고 목록 확인으로 돌아간다. 실행 폴더는 만들지 않았으므로 사이드바에 빈 실행이 생기지 않는다. 로그는 App Support에 남는다. 앱이 띄운 Artemis·테스트 서버는 끄지 않는다.
+- 실패: 그 항목이 빨갛게 되고 위에 노트(마지막 30줄 + "다시 시도" / "목록으로"). "다시 시도"는 실패한 항목부터 다시 한다. "목록으로"는 취소와 같다. 실패한 준비의 로그는 화면을 떠난 뒤에는 App Support 파일로만 남는다.
 - 종료 확인(`applicationShouldTerminate`)은 준비 중에도 뜬다. 종료하면 앱이 띄운 프로세스를 모두 끝낸다.
 
 ### 5.10 시간 제한
-Artemis 응답 60초 · 테스트 서버 health 60초 · 빌드 20분 · 설치 3분 · 로그인 60초 · `pm clear` 30초 · adb 점검 명령 20초(기존 `ShellRunner` 기본값). 기기 잠금 대기는 제한 없음. 넘기면 그 항목 실패.
+Artemis 응답 60초 · 테스트 서버 health `start_timeout`(기본 60초) · 빌드 20분 · 설치 3분 · `pm grant` 묶음 30초 · 로그인 60초 · `pm clear` 30초 · adb 점검 명령 20초(기존 `ShellRunner` 기본값). 기기 잠금 대기는 제한 없음(사람 몫). 넘기면 그 항목 실패.
 
 ### 5.11 run-state.json · 판정 단계
-- `RunStateFile`에 `prepare` 블록을 더한다: `{ "artemisStartedByApp", "serverStartedByApp", "buildSkipped", "skipReason", "installedCommit", "loginRole", "durationSeconds" }`.
-- `qa-run` 스킬의 `앱 실행 모드: 준비` 절을 지우고 "준비(점검·서버·빌드·설치·로그인·초기화)는 앱이 한다"고 적는다. `판정` 절에 `run-state.json`의 `prepare`와 `artifacts/prepare.log`를 참고해 `summary.md` 머리말(소스 SHA·빌드 건너뜀 여부)을 쓰라고 더한다. 계획 SHA와 소스 SHA가 다르면 앱이 `prepare`에 두 값을 남기고 판정이 적는다.
-- `StagePrompt.prepare`·`Stage.prepare`는 지운다. 준비 단계 `StageRecord`는 필요 없어진다(로그가 실행 폴더에 남는다).
+- `RunStateFile`에 `prepare` 블록을 더한다: `{ "artemisStartedByApp", "serverStartedByApp", "buildSkipped", "skipReason", "installedCommit", "sourceCommit", "planCommit", "loginRole", "durationSeconds" }`. `sourceCommit`·`planCommit`이 다르면 판정이 `summary.md` 머리말에 적는다(지금 스킬이 "계획 SHA <계획> · 소스 <현재>"로 남기던 것).
+- `qa-run` 스킬의 `앱 실행 모드: 준비` 절을 지우고 "준비(점검·서버·빌드·설치·권한·로그인·초기화)는 앱이 한다"고 적는다. `판정` 절에 `run-state.json`의 `prepare`와 `artifacts/prepare.log`를 참고해 `summary.md` 머리말(소스 SHA·빌드 건너뜀 여부)을 쓰라고 더한다. 스킬 2단계 3번(채팅 경로의 로그인)은 그대로이고, `android-login.sh`의 새 종료 코드 7만 "로그인 화면이 아니다"로 함께 적는다.
+- `StagePrompt.prepare`·`Stage.prepare`는 지운다. App Support에 남은 옛 `prepare-*.json` 기록은 읽지 않고 그대로 둔다(`StageRecordStore.latest(stage:)`가 `.prepare`를 받을 일이 없다).
 
 ### 5.12 문서·양식
 - `README.md` "3. 실행 준비 (사람)" 절을 "앱이 한다, 사람은 기기 잠금 해제와 USB 연결"로 줄이고, 터미널로 쓰는 경우(`qa-run` 채팅 실행)의 절차는 스킬에 남긴다.
 - `AGENTS.md` 폴더 구조에 `.install.json`을, `.gitignore`에 `.install.json`을 더한다.
 - `templates/project.yaml`에 5.1 예시, `templates/test_plan.md`에 5.8 칸.
-- `tools/artemis.md`의 "서버" 절에 "앱에서 실행하면 앱이 띄운다"를 더한다.
+- `tools/artemis.md`의 "서버" 절에 "앱에서 실행하면 앱이 띄운다"를, `tools/android-login.sh` 머리 주석에 `--tap`과 종료 코드 7을 더한다.
 
 ## 6. 빌더에게 맡기는 것
 
 - adb 점검의 정확한 명령과 출력 파싱(잠금·화면 켜짐·알림 권한은 Android 버전마다 다르다). 못 읽는 값은 "미확인"으로 두고 막지 않는다.
-- 자식 프로세스 그룹을 띄우고 앱 종료 때 끝내는 구현(기존 `ProcessShellRunner`·`ClaudeRunner.cancel`의 프로세스 그룹 처리를 재사용).
+- 자식 프로세스 그룹을 띄우고 앱 종료 때 끝내는 구현(기존 `ProcessShellRunner`·`ClaudeRunner.cancel`의 프로세스 그룹 처리를 재사용). 빌드처럼 긴 명령의 출력을 끝날 때까지 모으지 않고 조금씩 읽어 로그에 보이는 방법.
 - 준비 화면·승인 시트의 SwiftUI 세부(목업 기준), `AppModel` 안에서 준비 상태를 어디에 둘지(1600줄이 더 커지지 않게 준비 조정자를 `QATwinCore`에 따로 두는 것을 권한다).
 - `.install.json`·`prepare.log`·`prepare` 블록의 정확한 필드와 테스트 fixture.
 - `android-login.sh --tap`의 요소 고르기(글자가 든 clickable이 여럿이면 가장 아래 것).

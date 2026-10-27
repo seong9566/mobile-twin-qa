@@ -51,12 +51,12 @@ a{color:#0a4aa3}a:hover{color:#0956bb}
       </div>
 
       <section class="field" aria-labelledby="chk-h">
-        <span id="chk-h" style="display:flex;align-items:baseline;gap:8px">준비 점검 <span style="font-weight:400;color:#5d636c;font-size:11px">방금 확인 · 띄울 수 있는 건 시작할 때 앱이 띄워요</span></span>
+        <span id="chk-h" style="display:flex;align-items:baseline;gap:8px">준비 점검 <span style="font-weight:400;color:#5d636c;font-size:11px">방금 확인 · Artemis는 기기 목록에 필요해 바로 띄웠고, 테스트 서버는 시작할 때 띄워요</span></span>
         <div class="group">
           <div class="group-r">
-            <svg class="ico" viewBox="0 0 24 24" role="img" aria-label="띄울 예정" style="color:#0a4aa3"><circle cx="12" cy="12" r="9"></circle><path d="m10 8 6 4-6 4z"></path></svg>
+            <svg class="ico" viewBox="0 0 24 24" role="img" aria-label="확인됨" style="color:#1c7a3d;stroke-width:2.2"><path d="m5 12 4 4 10-10"></path></svg>
             <span style="width:110px;flex-shrink:0;font-weight:600">Artemis 서버</span>
-            <span style="flex-grow:1;min-width:0">꺼져 있음 → 시작하면 띄워요 <span class="mono" style="color:#5d636c">uv run artemis ui --port 8100</span></span>
+            <span style="flex-grow:1;min-width:0">꺼져 있어서 띄웠어요 · <span class="mono">127.0.0.1:8100</span> 응답 · 앱을 닫으면 같이 꺼요</span>
           </div>
           <div class="group-r">
             <svg class="ico" viewBox="0 0 24 24" role="img" aria-label="띄울 예정" style="color:#0a4aa3"><circle cx="12" cy="12" r="9"></circle><path d="m10 8 6 4-6 4z"></path></svg>
@@ -91,8 +91,11 @@ a{color:#0a4aa3}a:hover{color:#0956bb}
           </div>
           <div class="group-r">
             <svg class="ico" viewBox="0 0 24 24" role="img" aria-label="실행 예정" style="color:#0a4aa3"><circle cx="12" cy="12" r="9"></circle><path d="m10 8 6 4-6 4z"></path></svg>
-            <span style="width:110px;flex-shrink:0;font-weight:600">로그인</span>
-            <span style="flex-grow:1;min-width:0">field_worker (<span class="mono">TEST_USER_ID</span>) — 앱이 값을 넣고 '로그인'을 눌러요. 초기화한 뒤에도 다시 해요</span>
+            <span style="width:110px;flex-shrink:0;font-weight:600">로그인 역할</span>
+            <div style="display:flex;flex-direction:column;gap:4px;flex-grow:1;min-width:0">
+              <select style="width:100%" aria-label="로그인 역할"><option>field_worker — TEST_USER_ID (AUTH-01 계정 칸 기준)</option><option>admin — TEST_ADMIN_ID</option></select>
+              <span style="font-size:11px;color:#5d636c">앱이 값을 넣고 '로그인'을 눌러요. 역할 키가 적힌 시나리오는 그 역할을 써요</span>
+            </div>
           </div>
         </div>
       </section>
