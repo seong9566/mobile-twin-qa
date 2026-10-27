@@ -21,6 +21,8 @@ struct ApprovalSheet: View {
     @State private var isImportPresented = false
     @State private var screenshotApproved = false
     @State private var presentKeys: Set<String> = []
+    /// 가져오기가 끝날 때마다 올려 키 목록이 .env를 다시 읽게 한다.
+    @State private var envRevision = 0
     @State private var accountRoles: [String: AccountRole] = [:]
     @State private var deviceError: String?
 
@@ -52,6 +54,7 @@ struct ApprovalSheet: View {
                             title: "테스트 env",
                             usage: envKeyUsage
                         )
+                        .id(envRevision)
                         HStack(spacing: 10) {
                             Button("원본 .env에서 가져오기…", systemImage: "square.and.arrow.down") {
                                 isImportPresented = true
@@ -131,7 +134,10 @@ struct ApprovalSheet: View {
                     sourceDir: source,
                     envSource: appModel.projectConfig(for: project).envSource,
                     projectEnv: project.dir.appending(path: ".env"),
-                    onDone: { presentKeys = currentPresentKeys }
+                    onDone: {
+                        presentKeys = currentPresentKeys
+                        envRevision += 1
+                    }
                 )
             }
         }
