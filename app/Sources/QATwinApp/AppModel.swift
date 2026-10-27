@@ -38,7 +38,8 @@ struct PlanSourceInfo: Equatable {
     let path: String
     let branch: String?
     let commit: String?
-    let isDirty: Bool
+    /// nil이면 git status를 읽지 못했다.
+    let isDirty: Bool?
     /// 소스 폴더가 .cache/repos면 계획을 쓸 때 project.yaml 브랜치 최신으로 맞춘다.
     let isCache: Bool
 }
@@ -243,7 +244,8 @@ final class AppModel {
                 saved.key = projectKey
                 try? stageRecordStore.save(saved)
             }
-            selectedProject = project
+            // 이전에 고른 다른 프로젝트의 계획·실행이 남지 않게 새 프로젝트로 바꾼다.
+            selectProject(project)
             // 등록이 끝나면 바로 쓰지 않고 범위를 정하는 시작 화면으로 간다.
             showPlanSetup(for: project)
         } catch {
@@ -281,8 +283,11 @@ final class AppModel {
     func generatePlan(scope: String? = nil, answers: [String] = []) async {
         guard let project = selectedProject else { return }
         planAnswers = answers
-        planSnapshot = Self.planSnapshotFiles.reduce(into: [:]) { snapshot, name in
-            snapshot[name] = (try? String(contentsOf: project.dir.appending(path: name), encoding: .utf8)) ?? ""
+        // 답을 달아 다시 쓸 때는 처음 시작할 때의 내용을 기준으로 둬야 앞 실행의 변경도 요약에 나온다.
+        if answers.isEmpty {
+            planSnapshot = Self.planSnapshotFiles.reduce(into: [:]) { snapshot, name in
+                snapshot[name] = (try? String(contentsOf: project.dir.appending(path: name), encoding: .utf8)) ?? ""
+            }
         }
         let succeeded = await runStage(
             .plan,
@@ -319,7 +324,12 @@ final class AppModel {
         guard let workspace else { return nil }
         let cache = workspace.root.appending(path: ".cache/repos/\(project.name)").path
         let path = project.sourcePath.map(expandedPath) ?? cache
-        guard FileManager.default.fileExists(atPath: path) else { return nil }
+        guard FileManager.default.fileExists(atPath: path) else {
+            // source_path를 정했는데 폴더가 없으면 받지 않으므로 경로만 알린다.
+            return project.sourcePath == nil
+                ? nil
+                : PlanSourceInfo(path: path, branch: nil, commit: nil, isDirty: nil, isCache: false)
+        }
         let shell = ProcessShellRunner()
         func git(_ args: [String]) async -> String? {
             guard let result = try? await shell.run("/usr/bin/git", ["-C", path] + args), result.status == 0 else { return nil }
@@ -332,7 +342,7 @@ final class AppModel {
             path: path,
             branch: branch,
             commit: commit,
-            isDirty: !(status ?? "").isEmpty,
+            isDirty: status.map { !$0.isEmpty },
             isCache: project.sourcePath == nil
         )
     }

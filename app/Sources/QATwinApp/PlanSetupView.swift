@@ -7,6 +7,7 @@ struct PlanSetupView: View {
 
     @State private var source: PlanSourceInfo?
     @State private var isLoadingSource = true
+    @State private var latestPlan: PlanDocument?
 
     var body: some View {
         ScrollView {
@@ -47,14 +48,11 @@ struct PlanSetupView: View {
             isLoadingSource = true
             source = nil
             if let project = appModel.selectedProject {
+                latestPlan = appModel.latestPlan(for: project)
                 source = await appModel.planSourceInfo(for: project)
             }
             isLoadingSource = false
         }
-    }
-
-    private var latestPlan: PlanDocument? {
-        appModel.selectedProject.flatMap(appModel.latestPlan(for:))
     }
 
     private func section<Content: View>(_ title: String, @ViewBuilder content: () -> Content) -> some View {
@@ -79,7 +77,7 @@ struct PlanSetupView: View {
                     Divider()
                     row("커밋", source.commit ?? "미확인", monospaced: true)
                     Divider()
-                    row("변경", source.isDirty ? "커밋하지 않은 변경이 있어요 — 그 상태 그대로 읽어요" : "없음")
+                    row("변경", source.isDirty.map { $0 ? "커밋하지 않은 변경이 있어요 — 그 상태 그대로 읽어요" : "없음" } ?? "미확인")
                 }
                 .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 8))
                 .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.qaLine))
@@ -97,7 +95,9 @@ struct PlanSetupView: View {
     private func comparison(_ source: PlanSourceInfo) -> some View {
         if let latest = latestPlan, let commit = source.commit, !source.isCache {
             let latestCommit = latest.header.commit
-            if commit.hasPrefix(latestCommit) || latestCommit.hasPrefix(commit) {
+            if latestCommit.isEmpty {
+                note("최근 계획(\(latest.url.lastPathComponent))에 기준 커밋이 적혀 있지 않아 비교하지 못했어요.", warn: false)
+            } else if commit.hasPrefix(latestCommit) || latestCommit.hasPrefix(commit) {
                 note("최근 계획(\(latest.url.lastPathComponent))과 같은 커밋이에요. 소스가 바뀌지 않았다면 다시 쓸 필요가 없을 수 있어요.", warn: false)
             } else {
                 note("소스가 바뀌었어요 — 최근 계획은 \(latestCommit), 지금 소스는 \(commit) 기준이에요.", warn: true)

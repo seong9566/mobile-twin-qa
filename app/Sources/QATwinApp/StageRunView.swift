@@ -48,7 +48,7 @@ struct StageRunView: View {
                                     Button("답 넣고 다시 시작", systemImage: "arrow.clockwise") {
                                         Task { await appModel.answerPlanDecision() }
                                     }
-                                    .disabled(appModel.planDecisionAnswer.trimmingCharacters(in: .whitespaces).isEmpty)
+                                    .disabled(appModel.planDecisionAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                                 }
                             }
                         }
@@ -149,7 +149,7 @@ struct StageRunView: View {
     private var description: String {
         switch stage {
         case .register:
-            "Claude Code가 앱 소스와 프로젝트 정보를 확인해 등록해요. 끝나면 테스트 계획을 써요."
+            "Claude Code가 앱 소스와 프로젝트 정보를 확인해 등록해요. 끝나면 새 계획의 범위를 정하는 화면으로 가요."
         case .plan:
             "Claude Code가 소스와 문서를 읽고 시나리오를 써요. 아래 항목은 실제 진행에 맞춰 체크되고, 끝나면 요약을 보여 드려요. 보통 5–15분 걸려요."
         case .prepare:

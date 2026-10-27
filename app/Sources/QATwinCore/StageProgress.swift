@@ -15,19 +15,29 @@ public struct StageProgress: Equatable, Sendable {
 
     public init(log: String) {
         for line in log.components(separatedBy: .newlines) {
-            let trimmed = line.trimmingCharacters(in: .whitespaces)
+            // 모델이 목록 기호·굵게·백틱·마침표를 붙여 써도 읽는다.
+            let trimmed = line.trimmingCharacters(in: Self.decoration)
             guard trimmed.hasPrefix(Self.marker) else { continue }
-            let body = trimmed.dropFirst(Self.marker.count).trimmingCharacters(in: .whitespaces)
+            let body = trimmed.dropFirst(Self.marker.count).trimmingCharacters(in: Self.decoration)
             if body.hasSuffix("끝") {
-                let step = body.dropLast().trimmingCharacters(in: .whitespaces)
+                guard let step = Self.step(in: String(body.dropLast())) else { continue }
                 finished.insert(step)
                 if current == step { current = nil }
                 hasMarkers = true
             } else if body.hasSuffix("시작") {
-                current = body.dropLast(2).trimmingCharacters(in: .whitespaces)
+                guard let step = Self.step(in: String(body.dropLast(2))) else { continue }
+                current = step
                 hasMarkers = true
             }
         }
+    }
+
+    private static let decoration = CharacterSet.whitespaces.union(CharacterSet(charactersIn: "-*>`.。"))
+
+    /// "범위 확정(1절)"·"`소스 맞추기`"처럼 꾸민 이름도 planSteps 이름으로 맞춘다. 모르는 이름은 버린다.
+    static func step(in raw: String) -> String? {
+        let name = raw.trimmingCharacters(in: decoration)
+        return planSteps.first { name.hasPrefix($0) } ?? (name.isEmpty ? nil : name)
     }
 }
 

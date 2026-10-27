@@ -18,6 +18,19 @@ import Testing
     #expect(!StageProgress(log: "진행 상황을 볼게요").hasMarkers)
 }
 
+@Test func stageProgressToleratesDecoration() {
+    let log = """
+    - 진행: 범위 확정(1절) 시작
+    `진행: 범위 확정 끝`
+    **진행: `소스 맞추기` 시작**
+    진행: 소스 맞추기 끝.
+    > 진행: 지식 정리 시작
+    """
+    let progress = StageProgress(log: log)
+    #expect(progress.finished == ["범위 확정", "소스 맞추기"])
+    #expect(progress.current == "지식 정리")
+}
+
 @Test func lineChangesCountsDuplicatesAndIgnoresBlank() {
     let changes = LineChanges.compare(before: "a\n\nb\nb\nc", after: "a\nb\nc\nd\n\n")
     #expect(changes.added == ["d"])
