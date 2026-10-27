@@ -177,7 +177,7 @@ struct QATwinApp: App {
         case .stage(.judge):
             return "결과 판정"
         case .stageRecord(let stage):
-            return (appModel.selectedProject?.name ?? "프로젝트") + (stage == .register ? " · 등록 기록" : " · 계획 기록")
+            return (appModel.selectedProject?.name ?? appModel.viewedStageRecord?.key ?? "프로젝트") + (stage == .register ? " · 등록 기록" : " · 계획 기록")
         case .running(let runDir):
             return "실행 \(runTitle(runDir))"
         case .results(let runDir):

@@ -382,6 +382,7 @@ final class AppModel {
             runServer = approval.server
             let scenarios = orderedScenarios.filter { approval.scenarioIDs.contains($0.id) }
             resetRunState(for: scenarios)
+            displayedPastRun = nil
             let orchestrator = makeOrchestrator(
                 runDir: runDir,
                 plan: plan,
