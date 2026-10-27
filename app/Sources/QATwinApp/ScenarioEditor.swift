@@ -25,7 +25,7 @@ struct ScenarioEditor: View {
                 VStack(alignment: .leading, spacing: 4) {
                     detail("등급", gradeLabel)
                     detail("플랫폼", draft.platform)
-                    detail("계정", draft.account)
+                    detail("계정", draft.account.isEmpty ? "로그인 안 함" : draft.account)
                     detail("사전 조건", draft.precondition ?? "없음")
                     detail("근거", (draft.evidence ?? "없음").replacingOccurrences(of: "`", with: ""))
                 }

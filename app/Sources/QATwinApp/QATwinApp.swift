@@ -41,6 +41,16 @@ struct QATwinApp: App {
                 Alert(title: Text(notice.title), message: Text(notice.message), dismissButton: .default(Text("확인")))
             }
             .confirmationDialog(
+                "이 단계를 취소할까요?",
+                isPresented: $appModel.isStageCancelConfirmationPresented,
+                titleVisibility: .visible
+            ) {
+                Button("단계 취소", role: .destructive) { appModel.cancelConfirmedStage() }
+                Button("계속 진행", role: .cancel) {}
+            } message: {
+                Text("Claude Code를 멈춰요. 쓰다 만 파일이 남았으면 확인해 주세요.")
+            }
+            .confirmationDialog(
                 "전체 실행을 중지할까요?",
                 isPresented: $isStopConfirmationPresented,
                 titleVisibility: .visible
@@ -80,6 +90,8 @@ struct QATwinApp: App {
             }
         case .stage(let stage):
             StageRunView(appModel: appModel, stage: stage)
+        case .stageRecord(let stage):
+            StageRecordView(appModel: appModel, stage: stage)
         case .reviewing:
             PlanListView(appModel: appModel)
         case .running(let runDir):
@@ -105,15 +117,19 @@ struct QATwinApp: App {
         .sharedBackgroundVisibility(.hidden)
 
         ToolbarItem(placement: .principal) {
-            PipelinePath(current: pipelineStep)
-                .fixedSize()
+            PipelinePath(
+                current: pipelineStep,
+                available: appModel.availableSteps(),
+                onSelect: appModel.showStep
+            )
+            .fixedSize()
         }
         // 단계 표시가 자체 유리 캡슐을 그리므로 툴바 공유 배경은 끈다(캡슐이 겹쳐 보인다).
         .sharedBackgroundVisibility(.hidden)
 
         ToolbarItemGroup(placement: .primaryAction) {
             if appModel.activeStage != nil {
-                Button("중지", systemImage: "stop") { appModel.cancelStage() }
+                Button("취소", systemImage: "xmark") { appModel.confirmStageCancel() }
                     .buttonStyle(.glass)
                     .foregroundStyle(Color.qaFail)
             }
@@ -160,6 +176,8 @@ struct QATwinApp: App {
             return "실행 준비"
         case .stage(.judge):
             return "결과 판정"
+        case .stageRecord(let stage):
+            return (appModel.selectedProject?.name ?? appModel.viewedStageRecord?.key ?? "프로젝트") + (stage == .register ? " · 등록 기록" : " · 계획 기록")
         case .running(let runDir):
             return "실행 \(runTitle(runDir))"
         case .results(let runDir):
@@ -193,8 +211,9 @@ struct QATwinApp: App {
 
     private var pipelineStep: PipelineStep? {
         switch appModel.phase {
-        case .stage(.register): .register
-        case .stage(.plan): .plan
+        case .stage(.register), .stageRecord(.register): .register
+        case .stage(.plan), .stageRecord(.plan): .plan
+        case .stageRecord: nil
         case .stage(.prepare), .stage(.judge), .running: .run
         case .results: .results
         case .reviewing: .review

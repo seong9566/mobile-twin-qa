@@ -113,8 +113,9 @@ public struct PlanDocument: Sendable {
         }
     }
 
+    /// 계정 칸이 없으면(로그인하지 않는 시나리오) 계정 키도 요구하지 않는다.
     private static func needsLogin(_ scenario: Scenario) -> Bool {
-        !scenario.account.contains("로그아웃 상태")
+        !scenario.account.isEmpty && !scenario.account.contains("로그아웃 상태")
     }
 
     private static func parseHeader(_ lines: [String]) -> PlanHeader {
@@ -209,7 +210,8 @@ public struct PlanDocument: Sendable {
             for line in block {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 if let fields = matches(
-                    #"^- platform:\s*(.*?)\s*·\s*등급:\s*([ABC])(?:\(([^)]*)\))?\s*·\s*계정:\s*(.*)$"#,
+                    // 계정 칸은 로그인하는 시나리오에만 있다.
+                    #"^- platform:\s*(.*?)\s*·\s*등급:\s*([ABC])(?:\(([^)]*)\))?(?:\s*·\s*계정:\s*(.*))?$"#,
                     in: trimmed
                 ) {
                     platform = fields[1]

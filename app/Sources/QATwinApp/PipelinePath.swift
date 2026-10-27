@@ -10,26 +10,35 @@ enum PipelineStep: String, CaseIterable {
 
 struct PipelinePath: View {
     let current: PipelineStep?
+    let available: Set<PipelineStep>
+    let onSelect: (PipelineStep) -> Void
 
     var body: some View {
         GlassEffectContainer(spacing: 2) {
             HStack(spacing: 2) {
                 ForEach(PipelineStep.allCases, id: \.self) { step in
-                    HStack(spacing: 5) {
-                        if stepIndex(step) < stepIndex(current) {
-                            Image(systemName: "checkmark")
-                                .foregroundStyle(Color.qaPass)
+                    // 단계를 누르면 그 단계의 진행 상황·기록 화면으로 간다.
+                    Button { onSelect(step) } label: {
+                        HStack(spacing: 5) {
+                            if stepIndex(step) < stepIndex(current) {
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(Color.qaPass)
+                            }
+                            Text(step.rawValue)
                         }
-                        Text(step.rawValue)
+                        .font(.system(size: 12, weight: step == current ? .semibold : .regular))
+                        .foregroundStyle(stepIndex(step) <= stepIndex(current) ? Color.qaText : Color.qaSecondaryText)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 4)
+                        .contentShape(Capsule())
+                        .glassEffect(
+                            step == current ? .regular.tint(Color.qaAccent.opacity(0.25)) : .identity,
+                            in: Capsule()
+                        )
                     }
-                    .font(.system(size: 12, weight: step == current ? .semibold : .regular))
-                    .foregroundStyle(stepIndex(step) <= stepIndex(current) ? Color.qaText : Color.qaSecondaryText)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 4)
-                    .glassEffect(
-                        step == current ? .regular.tint(Color.qaAccent.opacity(0.25)) : .identity,
-                        in: Capsule()
-                    )
+                    .buttonStyle(.plain)
+                    .disabled(!available.contains(step))
+                    .help(available.contains(step) ? "\(step.rawValue) 단계 보기" : "지금 볼 수 있는 \(step.rawValue) 단계가 없어요")
 
                     if step != PipelineStep.allCases.last {
                         Image(systemName: "chevron.right")

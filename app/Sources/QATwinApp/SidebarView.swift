@@ -55,21 +55,39 @@ struct SidebarView: View {
             .padding(.bottom, 3)
 
         ForEach(appModel.projects.filter { $0.category == category }) { project in
-            Button {
-                appModel.selectProject(project)
-            } label: {
-                Label(project.name, systemImage: "folder")
-                    .fontWeight(appModel.selectedProject?.id == project.id ? .semibold : .regular)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 8)
-                    .frame(height: 26)
-                    .background(
-                        appModel.selectedProject?.id == project.id && appModel.selectedPlan == nil
-                            ? Color.qaAccentWeak : .clear,
-                        in: RoundedRectangle(cornerRadius: 6)
-                    )
+            HStack(spacing: 2) {
+                Button {
+                    appModel.selectProject(project)
+                } label: {
+                    Label(project.name, systemImage: "folder")
+                        .fontWeight(appModel.selectedProject?.id == project.id ? .semibold : .regular)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(.horizontal, 8)
+                        .frame(height: 26)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+
+                Button {
+                    Task { await appModel.newPlan(for: project) }
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .semibold))
+                        .frame(width: 24, height: 24)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.qaSecondaryText)
+                .disabled(hasActiveExecution)
+                .help("\(project.name)의 새 테스트 계획 쓰기")
+                .accessibilityLabel("\(project.name) 새 테스트 계획")
+                .padding(.trailing, 4)
             }
-            .buttonStyle(.plain)
+            .background(
+                appModel.selectedProject?.id == project.id && appModel.selectedPlan == nil
+                    ? Color.qaAccentWeak : .clear,
+                in: RoundedRectangle(cornerRadius: 6)
+            )
 
             if appModel.selectedProject?.id == project.id {
                 let plans = appModel.plans(for: project)

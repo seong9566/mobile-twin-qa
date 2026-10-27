@@ -59,6 +59,20 @@ struct StageRunView: View {
                     .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.qaLine))
 
+                    if appModel.stageIsRunning, appModel.activeStage == stage {
+                        HStack {
+                            Text("취소하면 Claude Code를 멈춰요. 쓰다 만 파일이 남았으면 확인해 주세요.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.qaSecondaryText)
+                            Spacer()
+                            Button("취소", systemImage: "xmark", role: .destructive) {
+                                appModel.confirmStageCancel()
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+                        }
+                    }
+
                     DisclosureGroup(isExpanded: $isLogExpanded) {
                         ScrollView(.horizontal) {
                             Text(appModel.stageLog.isEmpty ? "출력을 기다리고 있어요." : appModel.stageLog)
@@ -96,7 +110,7 @@ struct StageRunView: View {
                 Divider().frame(height: 12)
                 Text(String(format: "Claude 단계 비용 $%.2f", appModel.stageCost ?? 0))
                 Divider().frame(height: 12)
-                Text("중지하면 쓰던 결과 파일은 남기지 않아요")
+                Text("취소하면 쓰다 만 파일이 남았는지 확인해 주세요")
                 Spacer()
             }
             .font(.system(size: 11))
