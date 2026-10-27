@@ -366,7 +366,7 @@ public actor RunOrchestrator {
                 traceLogMissingCount = 0
             }
             if log.exists, log.reader?.containsSpendLimit == true {
-                try? await api.stop(sessionID)
+                await stopSession(sessionID)
                 setState(.held(reason: "API 지출 한도"), for: scenario.id)
                 markWaitingAsNotRun(reason: "API 지출 한도")
                 continuation.yield(.spendLimitReached)
@@ -483,6 +483,12 @@ public actor RunOrchestrator {
         "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
+    /// 세션 중지 요청은 실행 Task가 취소돼도(앱 종료) 보낸다. 터미널·다른 기기의 Artemis가 기기를 계속 조작하지 않게.
+    private func stopSession(_ sessionID: String) async {
+        let api = self.api
+        await Task.detached { try? await api.stop(sessionID) }.value
+    }
+
     private func setState(_ state: ScenarioRunState, for id: String) {
         guard stateFile.states[id] != state else {
             return
@@ -507,7 +513,7 @@ public actor RunOrchestrator {
         guard stopAllRequested || stopCurrentRequested else {
             return false
         }
-        try? await api.stop(sessionID)
+        await stopSession(sessionID)
         setState(.held(reason: "사용자 중지"), for: id)
         logReaders[id] = nil
         currentID = nil

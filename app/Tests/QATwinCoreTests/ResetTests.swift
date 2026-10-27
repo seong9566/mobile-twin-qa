@@ -155,3 +155,41 @@ import Testing
         return await collector.value
     }
 }
+
+@Test func stopRequestIsSentEvenWhenRunTaskIsCancelled() async throws {
+    let plan = try PlanDocument.load(fixturePlan("2026-01-02-demo_app_test_plan.md"))
+    let scenario = plan.scenarios[0]
+    let directory = try tempDir()
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let api = FakeArtemisAPI(
+        goalIDs: [scenario.goal: scenario.id],
+        sessionIDs: [scenario.id: "S1"],
+        states: ["S1": Array(repeating: SessionState.running, count: 10_000)]
+    )
+    api.failsStopWhenCancelled = true
+    let orchestrator = RunOrchestrator(
+        api: api,
+        shell: RecordingShell(),
+        runDir: directory,
+        plan: plan,
+        scenarios: [scenario],
+        deviceSerial: "DEMO1",
+        server: "local",
+        planRelativePath: "p.md",
+        artemisHome: directory,
+        tracesDir: nil,
+        adbPath: "/test/adb",
+        pollInterval: .milliseconds(5)
+    )
+    let collector = Task { for await event in orchestrator.events where event == .finished { break } }
+    let run = Task { await orchestrator.start() }
+    while await api.runs().isEmpty { try await Task.sleep(for: .milliseconds(5)) }
+
+    // 앱 종료와 같은 순서: 전체 중지를 요청한 뒤 실행 Task를 취소한다.
+    await orchestrator.stopAll()
+    run.cancel()
+    await run.value
+    await collector.value
+
+    #expect(await api.stops() == ["S1"])
+}

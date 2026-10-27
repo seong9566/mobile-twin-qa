@@ -45,6 +45,8 @@ final class FakeArtemisAPI: ArtemisAPI, @unchecked Sendable {
     private var saveCalls: [(sessionID: String, path: String)] = []
     private let saveDelay: Duration?
     private var stopCalls: [String] = []
+    /// true면 취소된 Task 안의 stop은 URLSession처럼 보내지 못하고 실패한다.
+    var failsStopWhenCancelled = false
 
     init(
         goalIDs: [String: String] = [:],
@@ -115,6 +117,7 @@ final class FakeArtemisAPI: ArtemisAPI, @unchecked Sendable {
     }
 
     func stop(_ sid: String) async throws {
+        if failsStopWhenCancelled { try Task.checkCancellation() }
         withLock {
             stopCalls.append(sid)
         }
