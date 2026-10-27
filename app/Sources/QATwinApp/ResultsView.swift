@@ -116,10 +116,15 @@ struct ResultsView: View {
                             .font(.system(size: 12, weight: .medium))
                             .foregroundStyle(isSelected(result) ? Color.qaSelectedText : outcomeColor(result))
                     }
-                    Text("\(title(result)) · \(causeText(result))\(excludedNote(result))")
+                    Text("\(title(result)) · \(causeText(result))")
                         .font(.system(size: 12))
                         .foregroundStyle(isSelected(result) ? Color.qaSelectedText.opacity(0.88) : Color.qaSecondaryText)
                         .lineLimit(1)
+                    if isExcludedAsToolMisjudgment(result) {
+                        Text("도구 오판이라 md에서 뺐어요")
+                            .font(.system(size: 11))
+                            .foregroundStyle(isSelected(result) ? Color.qaSelectedText.opacity(0.8) : Color.qaTertiaryText)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -236,9 +241,8 @@ struct ResultsView: View {
             ?? "제목 없음"
     }
 
-    private func excludedNote(_ result: ScenarioResult) -> String {
-        let entry = appModel.reviewEntry(for: result)
-        return !entry.include && appModel.effectiveCause(for: result) == .toolMisjudgment ? " · 도구 오판이라 md에서 뺐어요" : ""
+    private func isExcludedAsToolMisjudgment(_ result: ScenarioResult) -> Bool {
+        !appModel.reviewEntry(for: result).include && appModel.effectiveCause(for: result) == .toolMisjudgment
     }
 
     private func causeText(_ result: ScenarioResult) -> String {

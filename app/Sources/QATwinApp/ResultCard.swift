@@ -168,6 +168,7 @@ struct ResultCard: View {
                 Toggle("수정 요청 md에 넣기", isOn: includeBinding)
                     .toggleStyle(.checkbox)
                     .font(.system(size: 12))
+                    .fixedSize()
             }
             TextEditor(text: memoBinding)
                 .font(.system(size: 13))
@@ -253,22 +254,26 @@ struct ResultCard: View {
                 Text("실패 원인")
                     .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(Color.qaSecondaryText)
+                    .fixedSize()
                 if let override {
                     Text(override.rawValue)
                         .font(.system(size: 13, weight: .semibold))
                     Text("· 내가 바꿈 (원래 Claude 판정: \(original))")
                         .font(.system(size: 12))
                         .foregroundStyle(Color.qaSecondaryText)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                     Button("되돌리기") { appModel.updateCause(id: result.id, cause: nil) }
                         .buttonStyle(.link)
                         .font(.system(size: 12))
+                        .fixedSize()
                 } else {
                     Text("Claude 판정: \(original)")
                         .font(.system(size: 13, weight: .semibold))
                 }
                 Menu("판정 바로잡기") {
                     ForEach(Cause.allCases, id: \.self) { cause in
-                        Button("\(cause.rawValue) — \(Self.causeSummary(cause))") {
+                        Button("\(cause.rawValue): \(Self.causeSummary(cause))") {
                             appModel.updateCause(id: result.id, cause: cause)
                         }
                         .disabled(cause == effective)
@@ -278,7 +283,9 @@ struct ResultCard: View {
                 .fixedSize()
                 .help("녹화를 보고 Claude 판정이 틀렸을 때만 바꿔요")
             }
-            Text(Self.causeSummary(effective))
+            Text(effective == nil && result.rawCause != nil
+                ? "세 가지 분류에 들지 않는 판정이에요 — 필요하면 바로잡아 주세요"
+                : Self.causeSummary(effective))
                 .font(.system(size: 12))
                 .foregroundStyle(Color.qaTertiaryText)
         }
