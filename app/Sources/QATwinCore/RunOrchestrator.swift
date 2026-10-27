@@ -450,7 +450,10 @@ public actor RunOrchestrator {
             "--tap", "로그인", "--wait", "50",
         ]
         for attempt in 0..<2 {
-            guard let result = try? await shell.run("/bin/bash", arguments, timeout: .seconds(120)) else {
+            // GUI 앱의 PATH에는 adb가 없다. 로그인 셸로 부르고 adb 폴더를 PATH 앞에 둔다.
+            let body = "export PATH=\"$QA_ADB_DIR:$PATH\"; bash " + arguments.map(Self.shellQuote).joined(separator: " ")
+            let shellCall = LoginShell.arguments(body, exports: [("QA_ADB_DIR", URL(fileURLWithPath: adbPath).deletingLastPathComponent().path)])
+            guard let result = try? await shell.run(shellCall.exe, shellCall.args, timeout: .seconds(120)) else {
                 return "로그인이 120초 안에 끝나지 않았어요"
             }
             switch LoginOutcome.interpret(status: result.status, output: result.out, freshInstallOrReset: scenario.resetsAppData) {
@@ -463,6 +466,10 @@ public actor RunOrchestrator {
             }
         }
         return "로그인하지 못했어요"
+    }
+
+    private static func shellQuote(_ value: String) -> String {
+        "'" + value.replacingOccurrences(of: "'", with: "'\\''") + "'"
     }
 
     private func setState(_ state: ScenarioRunState, for id: String) {

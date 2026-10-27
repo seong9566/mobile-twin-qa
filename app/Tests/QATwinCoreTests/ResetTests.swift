@@ -32,8 +32,9 @@ import Testing
         #expect(commands[0] == "/test/adb -s DEMO1 shell pm clear com.demo")
         #expect(commands[1] == "/test/adb -s DEMO1 shell pm grant com.demo android.permission.POST_NOTIFICATIONS")
         #expect(commands[2] == "/test/adb -s DEMO1 shell am start -n com.demo/.Main")
-        #expect(commands[3].hasPrefix("/bin/bash /test/android-login.sh DEMO1 "))
-        #expect(commands[3].hasSuffix("DEMO_USER_ID DEMO_USER_PASSWORD --tap 로그인 --wait 50"))
+        #expect(commands[3].contains("export QA_ADB_DIR='/test';"))
+        #expect(commands[3].contains("export PATH=\"$QA_ADB_DIR:$PATH\"; bash '/test/android-login.sh' 'DEMO1' "))
+        #expect(commands[3].hasSuffix("'DEMO_USER_ID' 'DEMO_USER_PASSWORD' '--tap' '로그인' '--wait' '50'"))
         #expect(await api.runs() == [scenario.id])
         #expect(states.contains(.preparing))
     }

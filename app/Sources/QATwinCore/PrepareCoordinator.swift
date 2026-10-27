@@ -675,7 +675,11 @@ public actor PrepareCoordinator {
             "--wait",
             "50",
         ].joined(separator: " ")
-        let arguments = LoginShell.arguments(command, exports: [])
+        // GUI 앱의 PATH에는 adb가 없다. adb 폴더를 PATH 앞에 둔다.
+        let arguments = LoginShell.arguments(
+            "export PATH=\"$QA_ADB_DIR:$PATH\"; " + command,
+            exports: [("QA_ADB_DIR", URL(fileURLWithPath: input.adbPath).deletingLastPathComponent().path)]
+        )
         let response = try await runShell(
             step: .login,
             exe: arguments.exe,
