@@ -431,3 +431,23 @@ public enum PlanSaveTarget {
         return nil
     }
 }
+
+/// 사이드바에 보일 계획 파일 이름. `yyyy-mm-dd`, 같은 날 두 번째 계획(`-HHmm`)이면 `yyyy-mm-dd HH:mm`.
+public enum PlanFileName {
+    public static func label(_ fileName: String) -> String {
+        let stem = (fileName as NSString).deletingPathExtension
+        guard stem.count >= 10,
+              stem.range(of: #"^\d{4}-\d{2}-\d{2}"#, options: .regularExpression) != nil
+        else {
+            return fileName
+        }
+
+        let date = String(stem.prefix(10))
+        guard stem.range(of: #"_test_plan-\d{4}$"#, options: .regularExpression) != nil else {
+            return date
+        }
+
+        let time = stem.suffix(4)
+        return "\(date) \(time.prefix(2)):\(time.suffix(2))"
+    }
+}

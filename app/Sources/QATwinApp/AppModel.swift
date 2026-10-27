@@ -108,6 +108,9 @@ final class AppModel {
     var planDecisionAnswer = ""
     var planSummary: PlanSummaryInfo?
     var isStageCancelConfirmationPresented = false
+    var isUnsavedEditsConfirmationPresented = false
+    /// 확인 창에서 "저장하고 이동"·"버리고 이동"을 고르면 할 일.
+    @ObservationIgnored private var pendingNavigation: (() -> Void)?
     @ObservationIgnored private var stageToCancel: Stage?
     var rateLimits: ClaudeRateLimits?
     var runEvents: [RunEvent] = []
@@ -132,6 +135,7 @@ final class AppModel {
     var selectedResultID: String?
     var isFixRequestPresented = false
     var judgeDuration: TimeInterval?
+    var isJudgeLogPresented = false
     var pendingCommitFiles: [String] = []
     var isCommitConfirmationPresented = false
 
@@ -202,12 +206,13 @@ final class AppModel {
         }
         do {
             if let project = try workspace.project(matchingSource: url) {
-                selectedProject = project
-                try selectNewestPlanIfAvailable(for: project)
+                withUnsavedEditsCheck { [self] in selectProject(project) }
                 return
             }
-            pendingSourceURL = url
-            isCategoryConfirmationPresented = true
+            withUnsavedEditsCheck { [self] in
+                pendingSourceURL = url
+                isCategoryConfirmationPresented = true
+            }
         } catch {
             show(error)
         }
@@ -817,7 +822,8 @@ final class AppModel {
                 project: context.project,
                 plan: workspace.map { relativePath(context.plan.url, from: $0.root) } ?? context.plan.url.path,
                 runDir: workspace.map { relativePath(context.runDir, from: $0.root) } ?? context.runDir.path
-            )
+            ),
+            record: StageRecord(stage: .judge, key: StageRecord.judgeKey(project: context.project, planName: context.runDir.deletingLastPathComponent().lastPathComponent, runName: context.runDir.lastPathComponent), startedAt: .now, status: .running)
         )
         judgeDuration = Date.now.timeIntervalSince(started)
         if succeeded {
@@ -831,6 +837,79 @@ final class AppModel {
             clearResults()
         }
         activeRun = nil
+    }
+
+    /// 이 실행의 판정 기록. 앱에서 판정했을 때만 있다.
+    func judgeRecord(for runDir: URL) -> StageRecord? {
+        guard let project = projects.first(where: {
+            runDir.standardizedFileURL.path.hasPrefix($0.dir.standardizedFileURL.path + "/")
+        }) else { return nil }
+        let isLive = activeStage == .judge
+            && activeRun?.runDir.standardizedFileURL == runDir.standardizedFileURL
+        return stageRecordStore.load(
+            stage: .judge,
+            key: StageRecord.judgeKey(project: project, planName: runDir.deletingLastPathComponent().lastPathComponent, runName: runDir.lastPathComponent),
+            isLive: isLive
+        )
+    }
+
+    // MARK: 저장 안 한 수정 보호
+
+    /// 저장하지 않은 수정이 있으면 확인 창을 띄우고, 없으면 바로 action을 한다.
+    private func withUnsavedEditsCheck(_ action: @escaping () -> Void) {
+        guard !editedScenarioIDs.isEmpty else {
+            action()
+            return
+        }
+        pendingNavigation = action
+        isUnsavedEditsConfirmationPresented = true
+    }
+
+    /// 확인 창의 "저장하고 이동". 저장에 실패하면(알림이 뜬다) 이동하지 않는다.
+    func saveEditsThenNavigate() {
+        let pending = pendingNavigation
+        pendingNavigation = nil
+        guard savePlan(), let pending else { return }
+        pending()
+    }
+
+    /// 확인 창의 "버리고 이동". 파일을 다시 읽어 고친 goal·통과 조건을 되돌린다(순서·포함은 그대로).
+    func discardEditsThenNavigate() {
+        editedScenarioIDs = []
+        if let url = selectedPlan?.url, let saved = try? PlanDocument.load(url) {
+            let positions = Dictionary(uniqueKeysWithValues: orderedScenarios.enumerated().map { ($0.element.id, $0.offset) })
+            selectedPlan = saved
+            orderedScenarios = saved.scenarios.sorted {
+                (positions[$0.id] ?? Int.max) < (positions[$1.id] ?? Int.max)
+            }
+        }
+        let pending = pendingNavigation
+        pendingNavigation = nil
+        pending?()
+    }
+
+    func cancelNavigation() {
+        pendingNavigation = nil
+    }
+
+    func requestSelectProject(_ project: ProjectRef) {
+        withUnsavedEditsCheck { [self] in selectProject(project) }
+    }
+
+    func requestSelectPlan(at url: URL) {
+        let isCurrent = url.standardizedFileURL == selectedPlan?.url.standardizedFileURL
+        withUnsavedEditsCheck { [self] in
+            let target = isCurrent ? (selectedPlan?.url ?? url) : url
+            do {
+                try selectPlan(at: target)
+            } catch {
+                notice = AppNotice(title: "계획을 열지 못했어요", message: error.localizedDescription)
+            }
+        }
+    }
+
+    func requestPlanSetup(for project: ProjectRef? = nil) {
+        withUnsavedEditsCheck { [self] in showPlanSetup(for: project) }
     }
 
     /// 취소 확인 창을 연 단계. 창이 떠 있는 사이 다음 단계로 넘어갔으면 그 단계는 취소하지 않는다.
@@ -947,15 +1026,17 @@ final class AppModel {
     func restartStage(from record: StageRecord?) async {
         guard !hasActiveExecution else { return }
         if record?.stage == .register, let path = record?.sourcePath, let category = record?.category {
-            pendingSourceURL = URL(fileURLWithPath: path)
-            await registerPendingSource(as: category)
+            withUnsavedEditsCheck { [self] in
+                pendingSourceURL = URL(fileURLWithPath: path)
+                Task { await registerPendingSource(as: category) }
+            }
         } else {
-            showPlanSetup()
+            requestPlanSetup()
         }
     }
 
     func newPlan(for project: ProjectRef) {
-        showPlanSetup(for: project)
+        requestPlanSetup(for: project)
     }
 
     /// 지금 돌지 않는 단계의 기록(showStep은 도는 단계를 진행 화면으로 보낸다).
@@ -1254,7 +1335,8 @@ final class AppModel {
                 project: context.project,
                 plan: workspace.map { relativePath(context.plan.url, from: $0.root) } ?? context.plan.url.path,
                 runDir: workspace.map { relativePath(runDir, from: $0.root) } ?? runDir.path
-            )
+            ),
+            record: StageRecord(stage: .judge, key: StageRecord.judgeKey(project: context.project, planName: runDir.deletingLastPathComponent().lastPathComponent, runName: runDir.lastPathComponent), startedAt: .now, status: .running)
         )
         judgeDuration = Date.now.timeIntervalSince(started)
         if succeeded {

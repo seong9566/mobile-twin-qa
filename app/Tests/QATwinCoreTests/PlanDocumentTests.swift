@@ -147,3 +147,11 @@ private func rolePlan() throws -> PlanDocument {
     #expect(plan.scenarios.map(\.gradeNote) == [nil, "사람이 시간 고르기"])
     #expect(plan.scenarios.map(\.platform) == ["android", "android"])
 }
+
+@Test func planFileNameLabelAddsTimeForSameDayPlans() {
+    #expect(PlanFileName.label("2026-10-27-stsp_patrol_test_plan.md") == "2026-10-27")
+    #expect(PlanFileName.label("2026-10-27-stsp_patrol_test_plan-1530.md") == "2026-10-27 15:30")
+    #expect(PlanFileName.label("2026-10-27-stsp_patrol_test_plan-15300.md") == "2026-10-27")
+    #expect(PlanFileName.label("2026-10-27-stsp_patrol_test_plan-1530") == "2026-10-27 15:30")
+    #expect(PlanFileName.label("notes.md") == "notes.md")
+}

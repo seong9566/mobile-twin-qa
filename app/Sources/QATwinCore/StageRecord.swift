@@ -48,6 +48,8 @@ public struct StageRecord: Codable, Equatable, Sendable {
     /// 등록은 아직 프로젝트가 없으므로 소스 폴더 이름(= 프로젝트 이름)으로, 나머지는 프로젝트 ID로 찾는다.
     public static func registerKey(projectName: String) -> String { projectName }
     public static func planKey(project: ProjectRef) -> String { project.id }
+    /// 판정은 실행 폴더마다 하나. 같은 프로젝트의 다른 계획이 같은 분에 실행돼도 겹치지 않게 계획 이름을 넣는다. url(stage:key:)가 `/`를 `_`로 바꾼다.
+    public static func judgeKey(project: ProjectRef, planName: String, runName: String) -> String { "\(project.id)/\(planName)/\(runName)" }
 }
 
 public struct StageRecordStore: Sendable {

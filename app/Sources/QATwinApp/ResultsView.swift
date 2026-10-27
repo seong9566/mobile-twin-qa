@@ -21,6 +21,9 @@ struct ResultsView: View {
                             Task { await appModel.retryJudgment() }
                         }
                     }
+                    if appModel.judgeRecord(for: runDir) != nil {
+                        Button("판정 로그 보기") { appModel.isJudgeLogPresented = true }
+                    }
                 }
             } else {
                 VStack(spacing: 0) {
@@ -41,6 +44,9 @@ struct ResultsView: View {
                     statusBar
                 }
             }
+        }
+        .sheet(isPresented: $appModel.isJudgeLogPresented) {
+            JudgeLogSheet(record: appModel.judgeRecord(for: runDir))
         }
     }
 
@@ -163,13 +169,31 @@ struct ResultsView: View {
     }
 
     private var statusBar: some View {
-        HStack(spacing: 14) {
+        let record = appModel.judgeRecord(for: runDir)
+        let title = if let record, let finishedAt = record.finishedAt {
+            "판정: Claude Code · \(duration(finishedAt.timeIntervalSince(record.startedAt)))"
+        } else if let judgeDuration = appModel.judgeDuration {
+            "판정: Claude Code · \(duration(judgeDuration))"
+        } else {
+            "판정: Claude Code"
+        }
+        return HStack(spacing: 14) {
             Text("Artemis 호출 \(totals.llmCalls)회")
             Divider().frame(height: 12)
             Text("입력 \(tokens(totals.promptTokens)) · 출력 \(tokens(totals.completionTokens)) 토큰")
             Divider().frame(height: 12)
             if FileManager.default.fileExists(atPath: runDir.appending(path: "results.json").path) {
-                Text(appModel.judgeDuration.map { "판정: Claude Code · \(duration($0))" } ?? "판정: Claude Code")
+                if record != nil {
+                    Button {
+                        appModel.isJudgeLogPresented = true
+                    } label: {
+                        Label(title, systemImage: "doc.text")
+                    }
+                    .buttonStyle(.plain)
+                    .help("판정 로그 보기")
+                } else {
+                    Text(title)
+                }
             } else {
                 Text("판정: 채팅으로 기록됨")
             }
@@ -280,6 +304,73 @@ struct ResultsView: View {
     private func duration(_ value: TimeInterval) -> String {
         let seconds = Int(value)
         return "\(seconds / 60)분 \(seconds % 60)초"
+    }
+}
+
+private struct JudgeLogSheet: View {
+    let record: StageRecord?
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text("판정 로그")
+                    .font(.system(size: 16, weight: .semibold))
+                if let record {
+                    Text(metadata(for: record))
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.qaSecondaryText)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 22)
+            .padding(.top, 18)
+            .padding(.bottom, 12)
+            Divider()
+            if let record {
+                ScrollView([.horizontal, .vertical]) {
+                    Text(record.log.isEmpty ? "출력이 없어요." : record.log)
+                        .font(.system(.caption, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                }
+                .background(Color.qaBar.opacity(0.55))
+            } else {
+                ContentUnavailableView("판정 기록이 없어요", systemImage: "doc.text.magnifyingglass")
+            }
+            Divider()
+            HStack {
+                Spacer()
+                Button("닫기") { dismiss() }
+                    .keyboardShortcut(.cancelAction)
+            }
+            .padding(.horizontal, 22)
+            .padding(.vertical, 12)
+        }
+        .frame(width: 760, height: 560)
+    }
+
+    private func metadata(for record: StageRecord) -> String {
+        var values = [statusText(record.status), record.startedAt.formatted(date: .abbreviated, time: .shortened)]
+        if let finishedAt = record.finishedAt {
+            let seconds = Int(finishedAt.timeIntervalSince(record.startedAt))
+            values.append(String(format: "걸린 시간 %d분 %02d초", seconds / 60, seconds % 60))
+        }
+        if let cost = record.cost {
+            values.append(String(format: "비용 $%.2f", cost))
+        }
+        return values.joined(separator: " · ")
+    }
+
+    private func statusText(_ status: StageRecord.Status) -> String {
+        switch status {
+        case .succeeded: "끝났어요"
+        case .failed: "실패했어요"
+        case .cancelled: "취소했어요"
+        case .interrupted: "앱이 다시 시작되어 중단됐어요"
+        case .running: "진행 중이에요"
+        }
     }
 }
 
