@@ -261,15 +261,11 @@ struct ResultCard: View {
                     ? "세 가지 분류에 들지 않는 판정이에요 — 필요하면 바로잡아 주세요"
                     : Self.causeSummary(effective))
             if override != nil {
-                Text("내가 바꿈 · 원래 Claude 판정: \(originalLabel)")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Color.qaTertiaryText)
-                    .lineLimit(1)
-                    .truncationMode(.middle)
                 Button("되돌리기") { appModel.updateCause(id: result.id, cause: nil) }
                     .buttonStyle(.link)
                     .font(.system(size: 11))
                     .fixedSize()
+                    .help("원래 Claude 판정(\(originalLabel))으로 되돌려요")
             } else {
                 Text("Claude 판정")
                     .font(.system(size: 11))
