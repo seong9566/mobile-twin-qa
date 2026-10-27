@@ -29,13 +29,29 @@ struct StageRunView: View {
                     }
 
                     if let decision = appModel.stageDecision {
-                        HStack(spacing: 10) {
-                            Image(systemName: "exclamationmark.circle")
-                            Text(decision)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            Button("닫기") { appModel.stageDecision = nil }
+                        VStack(alignment: .leading, spacing: 10) {
+                            HStack(spacing: 10) {
+                                Image(systemName: "exclamationmark.circle")
+                                Text(decision)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                if !canAnswerDecision {
+                                    Button("닫기") { appModel.stageDecision = nil }
+                                }
+                            }
+                            .foregroundStyle(Color.qaWarn)
+                            // 계획 단계는 그 자리에서 답을 달아 같은 범위로 다시 쓴다.
+                            if canAnswerDecision {
+                                HStack(spacing: 8) {
+                                    TextField("답을 적어 주세요", text: $appModel.planDecisionAnswer)
+                                        .textFieldStyle(.roundedBorder)
+                                        .onSubmit { Task { await appModel.answerPlanDecision() } }
+                                    Button("답 넣고 다시 시작", systemImage: "arrow.clockwise") {
+                                        Task { await appModel.answerPlanDecision() }
+                                    }
+                                    .disabled(appModel.planDecisionAnswer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                                }
+                            }
                         }
-                        .foregroundStyle(Color.qaWarn)
                         .padding(10)
                         .background(Color.qaWarnWeak, in: RoundedRectangle(cornerRadius: 7))
                         .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.qaWarnLine))
@@ -133,9 +149,9 @@ struct StageRunView: View {
     private var description: String {
         switch stage {
         case .register:
-            "Claude Code가 앱 소스와 프로젝트 정보를 확인해 등록해요. 끝나면 테스트 계획을 써요."
+            "Claude Code가 앱 소스와 프로젝트 정보를 확인해 등록해요. 끝나면 새 계획의 범위를 정하는 화면으로 가요."
         case .plan:
-            "Claude Code가 소스와 문서를 읽고 시나리오를 써요. 끝나면 목록 확인으로 넘어가요. 보통 5–15분 걸려요."
+            "Claude Code가 소스와 문서를 읽고 시나리오를 써요. 아래 항목은 실제 진행에 맞춰 체크되고, 끝나면 요약을 보여 드려요. 보통 5–15분 걸려요."
         case .prepare:
             "Claude Code가 승인한 기기·서버·시나리오로 실행 폴더를 준비해요."
         case .judge:
@@ -143,29 +159,60 @@ struct StageRunView: View {
         }
     }
 
+    private var canAnswerDecision: Bool {
+        stage == .plan && !appModel.stageIsRunning && appModel.activeStage == nil
+    }
+
+    /// 스킬이 낸 진행 줄. 계획 단계만 낸다.
+    private var progress: StageProgress? {
+        guard stage == .plan else { return nil }
+        let progress = StageProgress(log: appModel.stageLog)
+        return progress.hasMarkers ? progress : nil
+    }
+
+    /// 성공으로 끝났는지. 중지·실패·결정 필요로 멈췄으면 끝낸 항목까지만 체크한다.
+    private var finishedCleanly: Bool {
+        !appModel.stageIsRunning && !appModel.stageWasStopped && !appModel.stageFailed && appModel.stageDecision == nil
+    }
+
     private var tasks: [String] {
         switch stage {
         case .register: ["소스 확인", "프로젝트 등록", "설정 저장"]
-        case .plan: ["소스 맞추기", "지식 정리", "화면 분석", "시나리오 쓰기", "계획 저장"]
+        case .plan: StageProgress.planSteps
         case .prepare: ["승인 내용 확인", "실행 폴더 만들기", "실행 준비"]
         case .judge: ["실행 기록 읽기", "시나리오 판정", "결과 저장"]
         }
     }
 
+    /// 지금(또는 멈춘) 항목. 진행 줄이 있으면 그것을, 없으면 출력 양으로 어림한다.
     private var currentTaskIndex: Int {
-        guard appModel.stageIsRunning else { return max(tasks.count - 1, 0) }
-        let progress = appModel.stageLog.components(separatedBy: .newlines).count
-        return min(max(progress / 8, 0), max(tasks.count - 1, 0))
+        if finishedCleanly { return tasks.count }
+        if let progress {
+            if let current = progress.current, let index = tasks.firstIndex(of: current) { return index }
+            return tasks.firstIndex { !progress.finished.contains($0) } ?? tasks.count
+        }
+        let lines = appModel.stageLog.components(separatedBy: .newlines).count
+        return min(max(lines / 8, 0), max(tasks.count - 1, 0))
+    }
+
+    private func isTaskDone(_ index: Int) -> Bool {
+        if finishedCleanly { return true }
+        if let progress { return progress.finished.contains(tasks[index]) }
+        return index < currentTaskIndex
     }
 
     @ViewBuilder
     private func taskIcon(_ index: Int) -> some View {
-        if index < currentTaskIndex || !appModel.stageIsRunning {
+        if isTaskDone(index) {
             Image(systemName: "checkmark")
                 .foregroundStyle(Color.qaPass)
                 .fontWeight(.bold)
-        } else if index == currentTaskIndex {
+        } else if index == currentTaskIndex, appModel.stageIsRunning {
             ProgressView().controlSize(.small)
+        } else if index == currentTaskIndex {
+            // 중지·실패·결정 필요로 여기서 멈췄다.
+            Image(systemName: appModel.stageDecision != nil ? "questionmark.circle" : appModel.stageFailed ? "xmark.circle" : "pause.circle")
+                .foregroundStyle(appModel.stageFailed ? Color.qaFail : Color.qaWarn)
         } else {
             Circle().stroke(Color.qaStrongLine, lineWidth: 1.5)
         }

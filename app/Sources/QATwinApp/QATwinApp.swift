@@ -85,13 +85,17 @@ struct QATwinApp: App {
                 Text("사이드바에서 계획을 열거나 앱 소스 폴더를 등록하세요.")
             } actions: {
                 if appModel.selectedProject != nil {
-                    Button("새 테스트 계획") { Task { await appModel.generatePlan() } }
+                    Button("새 테스트 계획") { appModel.showPlanSetup() }
                 }
             }
         case .stage(let stage):
             StageRunView(appModel: appModel, stage: stage)
         case .stageRecord(let stage):
             StageRecordView(appModel: appModel, stage: stage)
+        case .planSetup:
+            PlanSetupView(appModel: appModel)
+        case .planSummary:
+            PlanSummaryView(appModel: appModel)
         case .reviewing:
             PlanListView(appModel: appModel)
         case .running(let runDir):
@@ -169,7 +173,7 @@ struct QATwinApp: App {
 
     private var toolbarTitle: String {
         switch appModel.phase {
-        case .stage(.plan):
+        case .stage(.plan), .planSetup, .planSummary:
             return (appModel.selectedProject?.name ?? "프로젝트") + " · 새 테스트 계획"
         case .stage(.register):
             return "새 프로젝트 등록"
@@ -213,7 +217,7 @@ struct QATwinApp: App {
     private var pipelineStep: PipelineStep? {
         switch appModel.phase {
         case .stage(.register), .stageRecord(.register): .register
-        case .stage(.plan), .stageRecord(.plan): .plan
+        case .stage(.plan), .stageRecord(.plan), .planSetup, .planSummary: .plan
         case .stageRecord: nil
         case .stage(.prepare), .stage(.judge), .running: .run
         case .results: .results

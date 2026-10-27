@@ -24,9 +24,41 @@ enum AppPhase: Equatable {
     case stage(Stage)
     /// 지금 돌지 않는 등록·계획 단계의 마지막 기록.
     case stageRecord(Stage)
+    /// 새 계획을 쓰기 전 범위·기준 소스를 확인하는 화면.
+    case planSetup
+    /// 계획을 다 쓴 뒤 목록 확인으로 넘어가기 전 요약.
+    case planSummary(URL)
     case reviewing
     case running(runDir: URL)
     case results(runDir: URL)
+}
+
+/// 계획 쓰기 시작 화면에 보이는 기준 소스.
+struct PlanSourceInfo: Equatable {
+    let path: String
+    let branch: String?
+    let commit: String?
+    /// nil이면 git status를 읽지 못했다.
+    let isDirty: Bool?
+    /// 소스 폴더가 .cache/repos면 계획을 쓸 때 project.yaml 브랜치 최신으로 맞춘다.
+    let isCache: Bool
+}
+
+/// 계획을 다 쓴 뒤 보이는 요약.
+struct PlanSummaryInfo {
+    struct FileChange: Identifiable {
+        let name: String
+        let added: [String]
+        let removed: [String]
+        var id: String { name }
+    }
+
+    let planURL: URL
+    let automatic: Int
+    let human: Int
+    let manual: Int
+    let pilots: [String]
+    let changes: [FileChange]
 }
 
 struct AppNotice: Identifiable {
@@ -70,6 +102,11 @@ final class AppModel {
     var stageFailed = false
     /// 단계 기록 화면에 보일 기록. 없으면 이 프로젝트에서 앱으로 돌린 적이 없음.
     var viewedStageRecord: StageRecord?
+    /// 계획 쓰기 시작 화면의 범위 입력.
+    var planScope = ""
+    /// 결정 필요에 다는 답 입력.
+    var planDecisionAnswer = ""
+    var planSummary: PlanSummaryInfo?
     var isStageCancelConfirmationPresented = false
     @ObservationIgnored private var stageToCancel: Stage?
     var rateLimits: ClaudeRateLimits?
@@ -116,6 +153,10 @@ final class AppModel {
     @ObservationIgnored private var stageRecordSaveTask: Task<Void, Never>?
     /// showPastRun이 진행 화면 상태를 지난 실행 값으로 바꿔 놓았으면 그 실행.
     @ObservationIgnored private var displayedPastRun: URL?
+    /// 이번 계획 쓰기에 넘긴 답. 결정 필요에 다시 답하면 이어 붙인다.
+    @ObservationIgnored private var planAnswers: [String] = []
+    /// 계획 쓰기 전 knowledge.md·project.yaml 내용. 요약에서 바뀐 줄을 보인다.
+    @ObservationIgnored private var planSnapshot: [String: String] = [:]
     /// 실행 중인 프로젝트의 .env 값. Artemis 로그를 화면에 보이기 전에 가린다.
     @ObservationIgnored private var runSecretValues: [String] = []
 
@@ -203,29 +244,142 @@ final class AppModel {
                 saved.key = projectKey
                 try? stageRecordStore.save(saved)
             }
-            selectedProject = project
-            await generatePlan()
+            // 이전에 고른 다른 프로젝트의 계획·실행이 남지 않게 새 프로젝트로 바꾼다.
+            selectProject(project)
+            // 등록이 끝나면 바로 쓰지 않고 범위를 정하는 시작 화면으로 간다.
+            showPlanSetup(for: project)
         } catch {
             show(error)
         }
     }
 
-    func generatePlan() async {
+    /// + 버튼·"새 계획 쓰기": 바로 쓰지 않고 시작 화면을 연다.
+    func showPlanSetup(for project: ProjectRef? = nil) {
+        guard !hasActiveExecution else { return }
+        if let project, project.id != selectedProject?.id { selectProject(project) }
+        guard selectedProject != nil else { return }
+        planScope = ""
+        phase = .planSetup
+    }
+
+    func cancelPlanSetup() {
+        phase = selectedPlan == nil ? .empty : .reviewing
+    }
+
+    /// 시작 화면의 "계획 작성하기".
+    func startPlanFromSetup() async {
+        await generatePlan(scope: planScope, answers: [])
+    }
+
+    /// 결정 필요에 답을 달아 같은 범위로 다시 쓴다.
+    func answerPlanDecision() async {
+        let answer = planDecisionAnswer.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let decision = stageDecision, !answer.isEmpty else { return }
+        let question = decision.replacingOccurrences(of: "결정 필요:", with: "").trimmingCharacters(in: .whitespaces)
+        planDecisionAnswer = ""
+        await generatePlan(scope: planScope, answers: planAnswers + ["\(question) → \(answer)"])
+    }
+
+    func generatePlan(scope: String? = nil, answers: [String] = []) async {
         guard let project = selectedProject else { return }
+        planAnswers = answers
+        // 답을 달아 다시 쓸 때는 처음 시작할 때의 내용을 기준으로 둬야 앞 실행의 변경도 요약에 나온다.
+        if answers.isEmpty {
+            planSnapshot = Self.planSnapshotFiles.reduce(into: [:]) { snapshot, name in
+                snapshot[name] = (try? String(contentsOf: project.dir.appending(path: name), encoding: .utf8)) ?? ""
+            }
+        }
         let succeeded = await runStage(
             .plan,
-            prompt: StagePrompt.plan(project: project, scope: nil),
+            prompt: StagePrompt.plan(project: project, scope: scope, answers: answers),
             record: StageRecord(stage: .plan, key: StageRecord.planKey(project: project), startedAt: .now, status: .running)
         )
-        guard succeeded else { return }
+        // 결정이 필요해 멈췄으면 단계 화면에 남아 답을 받는다.
+        guard succeeded, stageDecision == nil else { return }
         do {
             guard let planURL = try planURLFromStageOutput(for: project) else {
                 notice = AppNotice(title: "계획 파일을 찾지 못했어요", message: "Claude Code 출력과 plans 폴더를 확인해 주세요.")
                 return
             }
-            try selectPlan(at: planURL)
+            let plan = try PlanDocument.load(planURL)
+            planSummary = summary(of: plan, project: project)
+            phase = .planSummary(planURL)
         } catch {
             show(error)
+        }
+    }
+
+    /// 요약 화면의 "목록 확인으로".
+    func openSummarizedPlan() {
+        guard case .planSummary(let url) = phase else { return }
+        do {
+            try selectPlan(at: url)
+        } catch {
+            show(error)
+        }
+    }
+
+    /// 시작 화면에 보일 기준 소스. project.local.yaml의 source_path, 없으면 .cache/repos/<project>.
+    func planSourceInfo(for project: ProjectRef) async -> PlanSourceInfo? {
+        guard let workspace else { return nil }
+        let cache = workspace.root.appending(path: ".cache/repos/\(project.name)").path
+        let path = project.sourcePath.map(expandedPath) ?? cache
+        guard FileManager.default.fileExists(atPath: path) else {
+            // source_path를 정했는데 폴더가 없으면 받지 않으므로 경로만 알린다.
+            return project.sourcePath == nil
+                ? nil
+                : PlanSourceInfo(path: path, branch: nil, commit: nil, isDirty: nil, isCache: false)
+        }
+        let shell = ProcessShellRunner()
+        func git(_ args: [String]) async -> String? {
+            guard let result = try? await shell.run("/usr/bin/git", ["-C", path] + args), result.status == 0 else { return nil }
+            return result.out.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        let branch = await git(["rev-parse", "--abbrev-ref", "HEAD"])
+        let commit = await git(["rev-parse", "--short", "HEAD"])
+        let status = await git(["status", "--porcelain"])
+        return PlanSourceInfo(
+            path: path,
+            branch: branch,
+            commit: commit,
+            isDirty: status.map { !$0.isEmpty },
+            isCache: project.sourcePath == nil
+        )
+    }
+
+    /// 이 프로젝트의 가장 최근 계획(시작 화면에서 소스 커밋과 비교한다).
+    func latestPlan(for project: ProjectRef) -> PlanDocument? {
+        plans(for: project).first.flatMap { try? PlanDocument.load($0) }
+    }
+
+    private static let planSnapshotFiles = ["knowledge.md", "project.yaml"]
+
+    private func summary(of plan: PlanDocument, project: ProjectRef) -> PlanSummaryInfo {
+        let changes = Self.planSnapshotFiles.compactMap { name -> PlanSummaryInfo.FileChange? in
+            let after = (try? String(contentsOf: project.dir.appending(path: name), encoding: .utf8)) ?? ""
+            let diff = LineChanges.compare(before: planSnapshot[name] ?? "", after: after)
+            guard !diff.added.isEmpty || !diff.removed.isEmpty else { return nil }
+            return PlanSummaryInfo.FileChange(name: name, added: diff.added, removed: diff.removed)
+        }
+        let titles = Dictionary(plan.scenarios.map { ($0.id, $0.title) }, uniquingKeysWith: { first, _ in first })
+        return PlanSummaryInfo(
+            planURL: plan.url,
+            automatic: plan.scenarios.count { $0.grade == .A },
+            human: plan.scenarios.count { $0.grade == .B },
+            manual: manualCount(of: plan),
+            pilots: plan.pilotIDs.map { id in titles[id].map { "\(id) · \($0)" } ?? id },
+            changes: changes
+        )
+    }
+
+    private func manualCount(of plan: PlanDocument) -> Int {
+        let manual = plan.scenarios.count { $0.grade == .C }
+        if manual > 0 { return manual }
+        guard let range = plan.text.range(of: #"(?ms)^###?\s+4\.8\s+수동\(C\).*?(?=^##\s|\z)"#, options: .regularExpression) else {
+            return 0
+        }
+        return String(plan.text[range]).components(separatedBy: .newlines).count {
+            $0.trimmingCharacters(in: .whitespaces).hasPrefix("- ")
         }
     }
 
@@ -796,14 +950,12 @@ final class AppModel {
             pendingSourceURL = URL(fileURLWithPath: path)
             await registerPendingSource(as: category)
         } else {
-            await generatePlan()
+            showPlanSetup()
         }
     }
 
-    func newPlan(for project: ProjectRef) async {
-        guard !hasActiveExecution else { return }
-        selectProject(project)
-        await generatePlan()
+    func newPlan(for project: ProjectRef) {
+        showPlanSetup(for: project)
     }
 
     /// 지금 돌지 않는 단계의 기록(showStep은 도는 단계를 진행 화면으로 보낸다).

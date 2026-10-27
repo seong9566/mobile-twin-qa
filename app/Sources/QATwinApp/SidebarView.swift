@@ -69,7 +69,7 @@ struct SidebarView: View {
                 .buttonStyle(.plain)
 
                 Button {
-                    Task { await appModel.newPlan(for: project) }
+                    appModel.newPlan(for: project)
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 11, weight: .semibold))
