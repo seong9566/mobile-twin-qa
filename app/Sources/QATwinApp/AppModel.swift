@@ -418,7 +418,8 @@ final class AppModel {
             artemisLog = "로그를 기다리고 있어요."
             return
         }
-        artemisLog = SecretRedactor.redact(reader.tail, values: runSecretValues)
+        // 앞을 잘라 낸 줄과 아직 쓰는 중인 마지막 줄에 걸친 값 조각도 가린다.
+        artemisLog = SecretRedactor.redact(reader.tail, values: runSecretValues, truncationMarker: LogTailReader.truncationMarker)
     }
 
     func updateMemo(id: String, memo: String) {
@@ -431,14 +432,7 @@ final class AppModel {
 
     func updateCause(id: String, cause: Cause?) {
         guard let result = result(id: id) else { return }
-        var entry = review.entry(for: result)
-        // Claude 판정과 같은 값으로 바로잡으면 바꾼 것이 아니므로 기록하지 않는다.
-        entry.causeOverride = cause == result.cause ? nil : cause
-        // 바로잡거나 되돌리면 md 포함 여부도 그 원인 기준으로 다시 정한다(도구 오판이면 뺀다).
-        // 기본 포함 규칙(Review.entry)과 같게: 실패·보류만 넣는다.
-        let needsAttention = result.outcome == .fail || result.outcome == .hold
-        entry.include = needsAttention && (cause ?? result.cause) != .toolMisjudgment
-        review.entries[id] = entry
+        review.correctCause(cause, for: result)
         scheduleReviewSave()
     }
 

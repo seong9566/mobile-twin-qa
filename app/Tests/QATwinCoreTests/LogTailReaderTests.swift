@@ -149,9 +149,9 @@ private func append(_ text: String, to url: URL) throws {
     try append(String(repeating: "가", count: 10), to: url)
     reader.read()
 
-    let expected = String(repeating: "가", count: LogTailReader.pendingLimit / 3)
+    let expected = LogTailReader.truncationMarker + String(repeating: "가", count: LogTailReader.pendingLimit / 3)
     #expect(reader.tail == expected)
-    #expect(reader.tail.utf8.count <= LogTailReader.pendingLimit)
+    #expect(reader.tail.utf8.count <= LogTailReader.pendingLimit + LogTailReader.truncationMarker.utf8.count)
 
     try append("\n끝\n", to: url)
     reader.read()
