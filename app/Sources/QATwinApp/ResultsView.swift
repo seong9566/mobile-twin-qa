@@ -127,6 +127,7 @@ struct ResultsView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
         }
@@ -150,6 +151,8 @@ struct ResultsView: View {
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 7)
+            // ID뿐 아니라 이름·빈 곳까지 행 전체를 누를 수 있게 한다.
+            .contentShape(RoundedRectangle(cornerRadius: 6))
             .foregroundStyle(isSelected(result) ? Color.qaSelectedText : Color.qaText)
             .background(isSelected(result) ? Color.qaAccent : .clear, in: RoundedRectangle(cornerRadius: 6))
         }

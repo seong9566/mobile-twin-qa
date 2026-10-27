@@ -209,7 +209,8 @@ public struct PlanDocument: Sendable {
             for line in block {
                 let trimmed = line.trimmingCharacters(in: .whitespaces)
                 if let fields = matches(
-                    #"^- platform:\s*(.*?)\s*·\s*등급:\s*([ABC])(?:\(([^)]*)\))?\s*·\s*계정:\s*(.*)$"#,
+                    // 계정 칸은 로그인하는 시나리오에만 있다.
+                    #"^- platform:\s*(.*?)\s*·\s*등급:\s*([ABC])(?:\(([^)]*)\))?(?:\s*·\s*계정:\s*(.*))?$"#,
                     in: trimmed
                 ) {
                     platform = fields[1]

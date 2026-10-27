@@ -43,7 +43,7 @@ struct RunProgressView: View {
             }
             RunTapeView(cells: tapeCells)
             HStack(spacing: 16) {
-                legend("끝남 · 판정 대기", color: .qaDone)
+                legend(isLive ? "끝남 · 판정 대기" : "끝남", color: .qaDone)
                 legend("진행 중", color: .qaAccent)
                 legend("보류", color: .qaTapeHold)
                 legend("대기", color: .qaIdle)
@@ -222,7 +222,7 @@ struct RunProgressView: View {
                 ? "API 지출 한도: 도달"
                 : "API 지출 한도: Console 설정 사용 · 이상 없음")
             Divider().frame(height: 12)
-            Text("끝나면 판정을 자동으로 시작해요")
+            Text(isLive ? "끝나면 판정을 자동으로 시작해요" : "지난 실행 기록이에요 · 판정은 결과에서 봐요")
             Spacer()
         }
         .font(.system(size: 11))
@@ -243,7 +243,13 @@ struct RunProgressView: View {
         }
     }
 
+    /// 지금 이 앱이 돌리는 실행인지. 아니면 run-state.json으로 다시 그린 지난 실행이다.
+    private var isLive: Bool {
+        appModel.activeRun?.runDir.standardizedFileURL == runDir.standardizedFileURL
+    }
+
     private var progressTitle: String {
+        guard isLive else { return "\(scenarios.count)개 실행 기록" }
         guard let currentIndex else { return "\(scenarios.count)개 실행 중" }
         return "\(scenarios.count)개 중 \(currentIndex + 1)번째 진행 중"
     }
@@ -277,7 +283,7 @@ struct RunProgressView: View {
             }
             .foregroundStyle(Color.qaAccentInk)
         case .finished:
-            Label("끝남 · 판정 대기", systemImage: "circle.fill")
+            Label(isLive ? "끝남 · 판정 대기" : "끝남", systemImage: "circle.fill")
                 .foregroundStyle(Color.qaAccentInk)
         case .held(let reason):
             Label("보류 · \(reason)", systemImage: "circle.fill")

@@ -112,3 +112,34 @@ private func rolePlan() throws -> PlanDocument {
     """.write(to: url, atomically: true, encoding: .utf8)
     return try PlanDocument.load(url)
 }
+
+@Test func parsesGradeLineWithoutAccountField() throws {
+    let dir = FileManager.default.temporaryDirectory.appending(path: "QATwinPlanNoAccount-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: dir) }
+    let url = dir.appending(path: "plan.md")
+    try """
+    ---
+    source:
+      branch: main
+      commit: abc1234
+      app_version: 1.0.0+1
+    ---
+
+    ## 4. 시나리오
+
+    ### HOME-01 · 빈 홈
+
+    - platform: android · 등급: A
+    - goal: 앱을 연다.
+
+    ### SCH-04 · 준비 전화
+
+    - platform: android · 등급: B(사람이 시간 고르기)
+    - goal: 일정을 만든다.
+    """.write(to: url, atomically: true, encoding: .utf8)
+    let plan = try PlanDocument.load(url)
+    #expect(plan.scenarios.map(\.grade) == [.A, .B])
+    #expect(plan.scenarios.map(\.gradeNote) == [nil, "사람이 시간 고르기"])
+    #expect(plan.scenarios.map(\.platform) == ["android", "android"])
+}

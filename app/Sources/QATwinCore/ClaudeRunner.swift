@@ -1,7 +1,7 @@
 import Darwin
 import Foundation
 
-public enum Stage: String, Sendable {
+public enum Stage: String, Codable, Sendable {
     case register = "등록"
     case plan = "계획"
     case prepare = "준비"

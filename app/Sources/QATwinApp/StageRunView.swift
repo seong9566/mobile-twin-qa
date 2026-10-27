@@ -59,6 +59,20 @@ struct StageRunView: View {
                     .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 8))
                     .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.qaLine))
 
+                    if appModel.stageIsRunning, appModel.activeStage == stage {
+                        HStack {
+                            Text("취소하면 Claude Code를 멈추고 쓰던 결과 파일은 남기지 않아요.")
+                                .font(.system(size: 12))
+                                .foregroundStyle(Color.qaSecondaryText)
+                            Spacer()
+                            Button("취소", systemImage: "xmark", role: .destructive) {
+                                appModel.isStageCancelConfirmationPresented = true
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.large)
+                        }
+                    }
+
                     DisclosureGroup(isExpanded: $isLogExpanded) {
                         ScrollView(.horizontal) {
                             Text(appModel.stageLog.isEmpty ? "출력을 기다리고 있어요." : appModel.stageLog)
