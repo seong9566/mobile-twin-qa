@@ -16,6 +16,8 @@ struct ApprovalSheet: View {
     @State private var isChecking = false
     @State private var avdNames: [String: String] = [:]
     @State private var buildLine: String?
+    /// buildLine을 계산한 기기. 지금 기기와 다르면 아직 빌드 여부를 모른다.
+    @State private var buildLineSerial: String?
     @State private var isImportPresented = false
     @State private var screenshotApproved = false
     @State private var presentKeys: Set<String> = []
@@ -336,14 +338,14 @@ struct ApprovalSheet: View {
 
     private var buildRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 10) {
-            Image(systemName: forceRebuild || buildLine != nil ? "play.circle" : "minus")
-                .foregroundStyle(Color.qaAccentInk)
+            Image(systemName: forceRebuild || buildLine != nil ? "play.circle" : (isBuildDecided ? "minus" : "circle"))
+                .foregroundStyle(isBuildDecided || forceRebuild ? Color.qaAccentInk : Color.qaIdle)
                 .frame(width: 16)
             Text("빌드·설치")
                 .font(.system(size: 12, weight: .semibold))
                 .frame(width: 110, alignment: .leading)
             VStack(alignment: .leading, spacing: 3) {
-                Text(forceRebuild ? "다시 빌드해요" : (buildLine ?? "건너뜀 — 기기에 설치된 빌드가 지금 소스와 같아요"))
+                Text(forceRebuild ? "다시 빌드해요" : !isBuildDecided ? "기기를 확인하면 정해요" : (buildLine ?? "건너뜀 — 기기에 설치된 빌드가 지금 소스와 같아요"))
                     .font(.system(size: 12))
                 if let project = appModel.selectedProject, !appModel.projectConfig(for: project).usesQAAppEnv {
                     Text("빌드가 원본 .env를 읽어요 — 고른 서버가 빌드에 반영되지 않아요")
@@ -398,6 +400,10 @@ struct ApprovalSheet: View {
         }
     }
 
+    private var isBuildDecided: Bool {
+        !deviceSerial.isEmpty && buildLineSerial == deviceSerial
+    }
+
     private var isDeviceWaiting: Bool {
         if case .waitingForHuman = checks[.device] { return true }
         return false
@@ -419,17 +425,19 @@ struct ApprovalSheet: View {
 
     private func refreshPreflight() async {
         guard !deviceSerial.isEmpty else { return }
+        let serial = deviceSerial
         let artemis = checks[.artemis]
         var updated = await appModel.preflight(serial: deviceSerial, server: server, loginRole: loginRole, scenarioIDs: selectedScenarios.map(\.id))
         if case .done(let detail) = artemis, detail.contains("띄웠") { updated[.artemis] = artemis }
         checks = updated
-        buildLine = await buildDecisionLine()
+        buildLine = await buildDecisionLine(serial: serial)
+        buildLineSerial = serial
     }
 
     /// 설치 기록과 지금 소스 커밋으로 빌드를 건너뛸지 미리 보인다. 서버 설정 해시는 준비 단계가 다시 본다.
-    private func buildDecisionLine() async -> String? {
+    private func buildDecisionLine(serial: String) async -> String? {
         guard let project = appModel.selectedProject else { return nil }
-        let entry = InstallRecords.load(projectDir: project.dir)[deviceSerial]
+        let entry = InstallRecords.load(projectDir: project.dir)[serial]
         let source = await appModel.planSourceInfo(for: project)
         guard let entry else { return "이 기기에 설치한 기록이 없어요 → 빌드해요" }
         if source?.isDirty == true { return "소스에 커밋하지 않은 변경이 있어요 → 빌드해요" }
