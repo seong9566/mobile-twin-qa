@@ -182,6 +182,7 @@ struct StageRecordView: View {
                     .foregroundStyle(Color.qaSecondaryText)
                 Spacer()
                 Button("목록 확인으로", systemImage: "list.bullet") { appModel.showStep(.review) }
+                    .disabled(isBusy)
             }
             VStack(alignment: .leading, spacing: 0) {
                 summaryRow("파일", plan.url.lastPathComponent)

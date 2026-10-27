@@ -753,7 +753,8 @@ final class AppModel {
         case .register: ongoing = [.register, .plan, .review, .run, .results]
         case .plan: ongoing = [.plan, .review, .run, .results]
         case .prepare: ongoing = [.run, .results]
-        case .judge: ongoing = [.results]
+        // 판정 중에는 실행 루프가 끝났지만 결과 파일은 판정이 쓰므로 실행을 직접 체크한다.
+        case .judge: steps.insert(.run); ongoing = [.results]
         case nil: ongoing = activeRun != nil ? [.run, .results] : []
         }
         return steps.subtracting(ongoing)
