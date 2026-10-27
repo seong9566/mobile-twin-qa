@@ -109,6 +109,8 @@ struct QATwinApp: App {
             PlanSummaryView(appModel: appModel)
         case .reviewing:
             PlanListView(appModel: appModel)
+        case .preparing:
+            PrepareView(appModel: appModel)
         case .running(let runDir):
             RunProgressView(appModel: appModel, runDir: runDir)
         case .results(let runDir):
@@ -163,7 +165,13 @@ struct QATwinApp: App {
                         || appModel.activeStage != nil
                 )
             }
-            if appModel.activeRun != nil, appModel.activeStage == nil {
+            if case .preparing = appModel.phase {
+                Button("준비 취소…", systemImage: "xmark") {
+                    isStopConfirmationPresented = true
+                }
+                .buttonStyle(.glass)
+                .foregroundStyle(Color.qaFail)
+            } else if appModel.activeRun != nil, appModel.activeStage == nil {
                 Button("전체 중지…", systemImage: "stop") {
                     isStopConfirmationPresented = true
                 }
@@ -188,12 +196,12 @@ struct QATwinApp: App {
             return (appModel.selectedProject?.name ?? "프로젝트") + " · 새 테스트 계획"
         case .stage(.register):
             return "새 프로젝트 등록"
-        case .stage(.prepare):
-            return "실행 준비"
         case .stage(.judge):
             return "결과 판정"
         case .stageRecord(let stage):
             return (appModel.selectedProject?.name ?? appModel.viewedStageRecord?.key ?? "프로젝트") + (stage == .register ? " · 등록 기록" : " · 계획 기록")
+        case .preparing(let runName):
+            return "실행 \(runTitle(URL(fileURLWithPath: runName))) · 준비"
         case .running(let runDir):
             return "실행 \(runTitle(runDir))"
         case .results(let runDir):
@@ -204,6 +212,9 @@ struct QATwinApp: App {
     }
 
     private var toolbarSubtitle: String {
+        if case .preparing = appModel.phase {
+            return "\(appModel.runDeviceSerial) · \(appModel.runServer) 서버"
+        }
         if case .running = appModel.phase {
             return "\(appModel.runDeviceSerial) · \(appModel.runServer) 서버"
         }
@@ -230,7 +241,7 @@ struct QATwinApp: App {
         case .stage(.register), .stageRecord(.register): .register
         case .stage(.plan), .stageRecord(.plan), .planSetup, .planSummary: .plan
         case .stageRecord: nil
-        case .stage(.prepare), .stage(.judge), .running: .run
+        case .stage(.judge), .running, .preparing: .run
         case .results: .results
         case .reviewing: .review
         case .empty: nil

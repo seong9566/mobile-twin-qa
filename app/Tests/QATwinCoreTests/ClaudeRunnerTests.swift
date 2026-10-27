@@ -42,30 +42,6 @@ private func claudeRunnerTempDir() throws -> URL {
             == "앱 실행 모드: 계획\n/qa-plan\n- 프로젝트: personal/demo_app\n- 범위: 로그인"
     )
 
-    let prompt = StagePrompt.prepare(
-        project: demo,
-        plan: "personal/demo_app/plans/a.md",
-        runDir: "personal/demo_app/runs/a/2026-01-03-0900",
-        deviceSerial: "D1",
-        server: "dev",
-        scenarioIDs: ["HOME-01", "HOME-02"],
-        buildInstall: true,
-        screenshotApproved: true
-    )
-    #expect(
-        prompt == """
-        앱 실행 모드: 준비
-        /qa-run
-        - 프로젝트: personal/demo_app
-        - 계획: personal/demo_app/plans/a.md
-        - 실행 폴더: personal/demo_app/runs/a/2026-01-03-0900
-        - 기기: D1
-        - 서버: dev
-        - 시나리오: HOME-01, HOME-02
-        - 빌드·설치: 예
-        - 스크린샷 전송 승인: 해당 없음(개인)
-        """
-    )
     #expect(
         StagePrompt.judge(
             project: demo,

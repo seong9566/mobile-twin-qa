@@ -40,5 +40,5 @@ private func store() throws -> StageRecordStore {
     try store.save(StageRecord(stage: .plan, key: "personal/new", startedAt: .now, status: .succeeded))
     let latest = try #require(store.latest(stage: .register))
     #expect(latest.key == "new" && latest.status == .interrupted)
-    #expect(store.latest(stage: .prepare) == nil)
+    #expect(store.latest(stage: .judge) == nil)
 }

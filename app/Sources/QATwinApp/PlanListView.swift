@@ -52,8 +52,19 @@ struct PlanListView: View {
                         }
 
                         TableColumn("사람 개입") { scenario in
-                            HumanActionChips(scenario: scenario)
-                                .help(Self.humanActionHelp)
+                            HStack(spacing: 4) {
+                                HumanActionChips(scenario: scenario)
+                                    .help(Self.humanActionHelp)
+                                if scenario.resetsAppData {
+                                    Text("초기화")
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .foregroundStyle(Color.qaAccentInk)
+                                        .padding(.horizontal, 6)
+                                        .frame(height: 18)
+                                        .background(Color.qaAccentWeak, in: Capsule())
+                                        .help("이 시나리오 직전에 앱 데이터를 지우고 다시 실행·로그인해요")
+                                }
+                            }
                         }
                         .width(140)
 
