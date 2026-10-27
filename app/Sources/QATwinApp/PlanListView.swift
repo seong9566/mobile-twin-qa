@@ -24,7 +24,8 @@ struct PlanListView: View {
                         .help("자동·반자동 시나리오를 모두 넣거나 모두 뺍니다")
                     }
 
-                    Table(appModel.automaticScenarios, selection: $appModel.selectedScenarioID) {
+                    // 끌어 옮기기는 칸이 아니라 행(TableRow)에 둔다. 칸에 두면 첫 클릭을 끌기가 가져가 두 번 눌러야 골라진다.
+                    Table(of: Scenario.self, selection: $appModel.selectedScenarioID) {
                         TableColumn("포함") { scenario in
                             Toggle("", isOn: includedBinding(scenario.id))
                                 .labelsHidden()
@@ -41,25 +42,12 @@ struct PlanListView: View {
 
                         TableColumn("제목") { scenario in
                             VStack(alignment: .leading, spacing: 2) {
-                                HStack(spacing: 6) {
-                                    Text(scenario.title)
-                                    if !SafetyLint.warnings(goal: scenario.goal).isEmpty {
-                                        Image(systemName: "exclamationmark.triangle")
-                                            .foregroundStyle(Color.qaWarn)
-                                            .accessibilityLabel("위험 동작 경고")
-                                    }
-                                }
+                                Text(scenario.title)
                                 if !scenario.dependsOn.isEmpty {
                                     Text(scenario.dependsOn.joined(separator: ", ") + " 뒤")
                                         .font(.system(size: 11))
                                         .foregroundStyle(Color.qaTertiaryText)
                                 }
-                            }
-                            .draggable(scenario.id)
-                            .dropDestination(for: String.self) { items, _ in
-                                guard let source = items.first else { return false }
-                                appModel.moveScenario(source, before: scenario.id)
-                                return true
                             }
                         }
 
@@ -73,10 +61,25 @@ struct PlanListView: View {
                                     scenario.grade == .B ? Color.qaHoldWeak : Color.qaAccentWeak,
                                     in: RoundedRectangle(cornerRadius: 4)
                                 )
+                                .help(scenario.grade == .B ? Self.gradeBHelp : Self.gradeAHelp)
                         }
                         .width(120)
 
+                    } rows: {
+                        ForEach(appModel.automaticScenarios) { scenario in
+                            TableRow(scenario)
+                                .draggable(scenario.id)
+                                .dropDestination(for: String.self) { items in
+                                    guard let source = items.first else { return }
+                                    appModel.moveScenario(source, before: scenario.id)
+                                }
+                        }
                     }
+
+                    Text("등급 — A 자동: Artemis가 혼자 끝까지 실행해요 · B 반자동: 중간에 사람이 할 동작이 있어요(시작할 때 알려요) · C 수동: 실행하지 않고 목록만 남겨요")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Color.qaSecondaryText)
+                        .fixedSize(horizontal: false, vertical: true)
 
                     if !appModel.manualScenarios.isEmpty || !appModel.manualScenarioText().isEmpty {
                         DisclosureGroup("수동(C) \(appModel.manualScenarioCount)개는 실행하지 않아요 — 목록 보기") {
@@ -128,6 +131,9 @@ struct PlanListView: View {
         .frame(height: 28)
         .background(.bar)
     }
+
+    private static let gradeAHelp = "A 자동: Artemis가 사람 없이 끝까지 실행해요. 판정은 끝난 뒤 Claude가 해요"
+    private static let gradeBHelp = "B 반자동: 실행 중 사람이 할 동작(로그인·태그 등)이 있어요. 시나리오를 시작할 때 알림을 보내니 기기 옆에서 지켜봐 주세요"
 
     private var includedCount: Int {
         appModel.automaticScenarios.count { appModel.includedScenarioIDs.contains($0.id) }
