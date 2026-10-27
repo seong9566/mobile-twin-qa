@@ -70,6 +70,8 @@ struct ScenarioEditor: View {
         .padding(18)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.qaBar.opacity(0.45))
+        // "버리고 이동"처럼 모델만 되돌린 뒤에도 편집 칸이 묵은 초안을 되살리지 않게 한다.
+        .onChange(of: scenario) { _, updated in draft = updated }
     }
 
     private func detail(_ name: String, _ value: String) -> some View {
