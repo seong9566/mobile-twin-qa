@@ -432,10 +432,12 @@ final class AppModel {
     func updateCause(id: String, cause: Cause?) {
         guard let result = result(id: id) else { return }
         var entry = review.entry(for: result)
-        entry.causeOverride = cause
-        if let cause {
-            entry.include = cause != .toolMisjudgment
-        }
+        // Claude 판정과 같은 값으로 바로잡으면 바꾼 것이 아니므로 기록하지 않는다.
+        entry.causeOverride = cause == result.cause ? nil : cause
+        // 바로잡거나 되돌리면 md 포함 여부도 그 원인 기준으로 다시 정한다(도구 오판이면 뺀다).
+        // 기본 포함 규칙(Review.entry)과 같게: 실패·보류만 넣는다.
+        let needsAttention = result.outcome == .fail || result.outcome == .hold
+        entry.include = needsAttention && (cause ?? result.cause) != .toolMisjudgment
         review.entries[id] = entry
         scheduleReviewSave()
     }

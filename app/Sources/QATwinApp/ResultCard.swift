@@ -9,28 +9,52 @@ struct ResultCard: View {
     let runDir: URL
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 16) {
-                header
-                rawValues
-                HStack(alignment: .top, spacing: 18) {
-                    video
-                    VStack(alignment: .leading, spacing: 14) {
-                        expectedActual
-                        checks
-                        if result.outcome != .pass {
-                            memo
-                            actions
+        VStack(alignment: .leading, spacing: 16) {
+            header
+            rawValues
+            GeometryReader { proxy in
+                // 영상은 남는 높이에 맞춰 폰 화면 비율(1080×2400)로 정한다. 창이 낮으면 그만큼 작아진다.
+                let videoHeight = max(proxy.size.height - Self.captionHeight, 0)
+                let videoWidth = min(videoHeight * Self.phoneAspect, proxy.size.width * 0.45)
+                HStack(alignment: .top, spacing: 22) {
+                    video(width: videoWidth, height: videoWidth / Self.phoneAspect)
+                    // 공간이 넉넉하면 메모 칸이 남는 높이를 채우고, 모자라면 오른쪽 칸만 스크롤한다.
+                    ViewThatFits(in: .vertical) {
+                        detailColumn(fillsHeight: true)
+                        ScrollView {
+                            detailColumn(fillsHeight: false)
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 }
             }
-            .padding(.horizontal, 22)
-            .padding(.vertical, 18)
         }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Color.qaBackground)
     }
+
+    private func detailColumn(fillsHeight: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 16) {
+            expectedActual
+            ScrollView {
+                checks
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            .frame(maxHeight: 260)
+            .fixedSize(horizontal: false, vertical: true)
+            if result.outcome != .pass {
+                memo(fillsHeight: fillsHeight)
+                actions
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: fillsHeight ? .infinity : nil, alignment: .topLeading)
+    }
+
+    private static let phoneAspect: CGFloat = 1080.0 / 2400.0
+    /// 영상 아래 경로 캡션: 간격 6 + 11pt 한 줄 ≈ 20, 여유를 둬 26.
+    private static let captionHeight: CGFloat = 26
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -47,20 +71,7 @@ struct ResultCard: View {
                 Spacer(minLength: 0)
             }
             if result.outcome != .pass {
-                HStack(spacing: 8) {
-                    Text("원인")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.qaSecondaryText)
-                    Picker("원인", selection: causeBinding) {
-                        Text("앱 결함").tag(Optional(Cause.appDefect))
-                        Text("도구 오판").tag(Optional(Cause.toolMisjudgment))
-                        Text("환경").tag(Optional(Cause.environment))
-                        Text("미정").tag(Optional<Cause>.none)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .fixedSize()
-                }
+                causeRow
             }
         }
     }
@@ -81,7 +92,7 @@ struct ResultCard: View {
         }
     }
 
-    private var video: some View {
+    private func video(width: CGFloat, height: CGFloat) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Group {
                 if let url = Artifacts.video(runDir: runDir, id: result.id) {
@@ -100,13 +111,15 @@ struct ResultCard: View {
                     }
                 }
             }
-            .frame(width: 236, height: 420)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
+            .frame(width: width, height: height)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
             Text("artifacts/\(result.id)/video.mp4")
+                .lineLimit(1)
+                .truncationMode(.middle)
                 .font(.system(size: 11, design: .monospaced))
                 .foregroundStyle(Color.qaTertiaryText)
         }
-        .frame(width: 236)
+        .frame(width: width)
     }
 
     private var expectedActual: some View {
@@ -145,14 +158,22 @@ struct ResultCard: View {
         }
     }
 
-    private var memo: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("수정할 점 — md에 그대로 들어가요")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.qaSecondaryText)
+    private func memo(fillsHeight: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("수정할 점 — md에 그대로 들어가요")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.qaSecondaryText)
+                Spacer()
+                Toggle("수정 요청 md에 넣기", isOn: includeBinding)
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 12))
+                    .fixedSize()
+            }
             TextEditor(text: memoBinding)
                 .font(.system(size: 13))
-                .frame(minHeight: 84)
+                // 이상적 높이를 고정해야 메모가 길어져도 ViewThatFits가 스크롤 쪽으로 바뀌지 않는다.
+                .frame(minHeight: 100, idealHeight: 100, maxHeight: fillsHeight ? .infinity : 160)
                 .padding(4)
                 .scrollContentBackground(.hidden)
                 .background(Color.qaBackground, in: RoundedRectangle(cornerRadius: 6))
@@ -162,8 +183,6 @@ struct ResultCard: View {
 
     private var actions: some View {
         HStack(spacing: 12) {
-            Toggle("수정 요청 md에 넣기", isOn: includeBinding)
-                .toggleStyle(.checkbox)
             Spacer()
             if canRetry {
                 Button("이 시나리오만 다시 돌리기", systemImage: "arrow.counterclockwise") {
@@ -223,11 +242,67 @@ struct ResultCard: View {
         )
     }
 
-    private var causeBinding: Binding<Cause?> {
-        Binding(
-            get: { appModel.effectiveCause(for: result) },
-            set: { appModel.updateCause(id: result.id, cause: $0) }
-        )
+    /// 실패 원인은 판정 단계에서 Claude가 붙인 분류다. 읽기 전용으로 보여 주고, 사람이 녹화를 보고
+    /// 다르다고 판단할 때만 "판정 바로잡기"로 바꾼다. 바꾼 값은 review.json에만 남고 원래 판정은 보존된다.
+    private var causeRow: some View {
+        // 예전에 원래 판정과 같은 값을 골라 저장된 경우도 "바꾸지 않음"으로 본다.
+        let override = appModel.reviewEntry(for: result).causeOverride.flatMap { $0 == result.cause ? nil : $0 }
+        let effective = appModel.effectiveCause(for: result)
+        let originalLabel = result.cause.map(Self.causeLabel) ?? result.rawCause ?? Self.causeLabel(nil)
+        return HStack(spacing: 8) {
+            Text("실패 원인")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Color.qaSecondaryText)
+                .fixedSize()
+            Text(override.map(Self.causeLabel) ?? originalLabel)
+                .font(.system(size: 13, weight: .semibold))
+                .fixedSize()
+                .help(effective == nil && result.rawCause != nil
+                    ? "세 가지 분류에 들지 않는 판정이에요 — 필요하면 바로잡아 주세요"
+                    : Self.causeSummary(effective))
+            if override != nil {
+                Button("되돌리기") { appModel.updateCause(id: result.id, cause: nil) }
+                    .buttonStyle(.link)
+                    .font(.system(size: 11))
+                    .fixedSize()
+                    .help("원래 Claude 판정(\(originalLabel))으로 되돌려요")
+            } else {
+                Text("Claude 판정")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.qaTertiaryText)
+                    .fixedSize()
+            }
+            Menu("판정 바로잡기") {
+                ForEach(Cause.allCases, id: \.self) { cause in
+                    Button(Self.causeLabel(cause)) {
+                        appModel.updateCause(id: result.id, cause: cause)
+                    }
+                    .disabled(cause == effective)
+                }
+            }
+            .menuStyle(.button)
+            .fixedSize()
+            .help("녹화를 보고 Claude 판정이 틀렸을 때만 바꿔요")
+        }
+    }
+
+    /// 화면에 보이는 원인 이름: 분류 · 다음에 할 일
+    private static func causeLabel(_ cause: Cause?) -> String {
+        switch cause {
+        case .appDefect: "앱 결함 · 코드 수정"
+        case .toolMisjudgment: "도구 오판 · 수정 불필요"
+        case .environment: "환경 · 환경 점검"
+        case nil: "미정 · 확인 필요"
+        }
+    }
+
+    private static func causeSummary(_ cause: Cause?) -> String {
+        switch cause {
+        case .appDefect: "앱 코드 버그 — 수정 요청 md로 넘길 대상"
+        case .toolMisjudgment: "앱은 맞게 동작했고 Artemis가 잘못 판단 — md에서 기본으로 빠져요"
+        case .environment: "네트워크·기기·계정처럼 앱 밖의 문제"
+        case nil: "원인을 아직 정하지 않았어요"
+        }
     }
 
     private var canRetry: Bool {
@@ -245,11 +320,11 @@ struct ResultCard: View {
             Text(label)
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundStyle(Color.qaTertiaryText)
-            Text(value).lineSpacing(3)
+            Text(value).lineSpacing(3).lineLimit(8)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .frame(maxWidth: .infinity, minHeight: 66, alignment: .topLeading)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .frame(maxWidth: .infinity, minHeight: 84, alignment: .topLeading)
         .background(color, in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).stroke(Color.qaLine))
     }

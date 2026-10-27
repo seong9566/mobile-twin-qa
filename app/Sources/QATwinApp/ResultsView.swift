@@ -72,6 +72,11 @@ struct ResultsView: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 2) {
                 sectionLabel("확인 필요")
+                Text("체크 = 수정 요청 md에 넣음")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Color.qaTertiaryText)
+                    .padding(.horizontal, 8)
+                    .padding(.bottom, 4)
                 ForEach(attentionResults) { result in
                     attentionRow(result)
                 }
@@ -79,7 +84,7 @@ struct ResultsView: View {
                 ForEach(passedResults) { result in
                     passedRow(result)
                 }
-                Text("체크한 항목이 수정 요청 md에 들어가요. 도구 오판은 기본으로 빠져요.")
+                Text("실패 원인이 도구 오판이면 기본으로 md에서 빠져요. 체크로 직접 넣고 뺄 수 있어요.")
                     .font(.system(size: 12))
                     .foregroundStyle(Color.qaSecondaryText)
                     .lineSpacing(3)
@@ -99,6 +104,7 @@ struct ResultsView: View {
             ))
             .labelsHidden()
             .toggleStyle(.checkbox)
+            .help("수정 요청 md에 넣기")
             Button {
                 appModel.selectedResultID = result.id
             } label: {
@@ -114,6 +120,11 @@ struct ResultsView: View {
                         .font(.system(size: 12))
                         .foregroundStyle(isSelected(result) ? Color.qaSelectedText.opacity(0.88) : Color.qaSecondaryText)
                         .lineLimit(1)
+                    if isExcludedAsToolMisjudgment(result) {
+                        Text("도구 오판이라 md에서 뺐어요")
+                            .font(.system(size: 11))
+                            .foregroundStyle(isSelected(result) ? Color.qaSelectedText.opacity(0.8) : Color.qaTertiaryText)
+                    }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
@@ -228,6 +239,10 @@ struct ResultsView: View {
         result.title
             ?? appModel.selectedPlan?.scenarios.first(where: { $0.id == result.id })?.title
             ?? "제목 없음"
+    }
+
+    private func isExcludedAsToolMisjudgment(_ result: ScenarioResult) -> Bool {
+        !appModel.reviewEntry(for: result).include && appModel.effectiveCause(for: result) == .toolMisjudgment
     }
 
     private func causeText(_ result: ScenarioResult) -> String {
