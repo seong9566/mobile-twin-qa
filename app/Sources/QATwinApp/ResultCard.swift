@@ -71,20 +71,7 @@ struct ResultCard: View {
                 Spacer(minLength: 0)
             }
             if result.outcome != .pass {
-                HStack(spacing: 8) {
-                    Text("원인")
-                        .font(.system(size: 12))
-                        .foregroundStyle(Color.qaSecondaryText)
-                    Picker("원인", selection: causeBinding) {
-                        Text("앱 결함").tag(Optional(Cause.appDefect))
-                        Text("도구 오판").tag(Optional(Cause.toolMisjudgment))
-                        Text("환경").tag(Optional(Cause.environment))
-                        Text("미정").tag(Optional<Cause>.none)
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .fixedSize()
-                }
+                causeRow
             }
         }
     }
@@ -173,9 +160,15 @@ struct ResultCard: View {
 
     private func memo(fillsHeight: Bool) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("수정할 점 — md에 그대로 들어가요")
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundStyle(Color.qaSecondaryText)
+            HStack {
+                Text("수정할 점 — md에 그대로 들어가요")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.qaSecondaryText)
+                Spacer()
+                Toggle("수정 요청 md에 넣기", isOn: includeBinding)
+                    .toggleStyle(.checkbox)
+                    .font(.system(size: 12))
+            }
             TextEditor(text: memoBinding)
                 .font(.system(size: 13))
                 // 이상적 높이를 고정해야 메모가 길어져도 ViewThatFits가 스크롤 쪽으로 바뀌지 않는다.
@@ -189,8 +182,6 @@ struct ResultCard: View {
 
     private var actions: some View {
         HStack(spacing: 12) {
-            Toggle("수정 요청 md에 넣기", isOn: includeBinding)
-                .toggleStyle(.checkbox)
             Spacer()
             if canRetry {
                 Button("이 시나리오만 다시 돌리기", systemImage: "arrow.counterclockwise") {
@@ -250,11 +241,56 @@ struct ResultCard: View {
         )
     }
 
-    private var causeBinding: Binding<Cause?> {
-        Binding(
-            get: { appModel.effectiveCause(for: result) },
-            set: { appModel.updateCause(id: result.id, cause: $0) }
-        )
+    /// 실패 원인은 판정 단계에서 Claude가 붙인 분류다. 읽기 전용으로 보여 주고, 사람이 녹화를 보고
+    /// 다르다고 판단할 때만 "판정 바로잡기"로 바꾼다. 바꾼 값은 review.json에만 남고 원래 판정은 보존된다.
+    private var causeRow: some View {
+        let original = result.cause?.rawValue ?? result.rawCause ?? "미정"
+        // 예전에 원래 판정과 같은 값을 골라 저장된 경우도 "바꾸지 않음"으로 본다.
+        let override = appModel.reviewEntry(for: result).causeOverride.flatMap { $0 == result.cause ? nil : $0 }
+        let effective = appModel.effectiveCause(for: result)
+        return VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 8) {
+                Text("실패 원인")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(Color.qaSecondaryText)
+                if let override {
+                    Text(override.rawValue)
+                        .font(.system(size: 13, weight: .semibold))
+                    Text("· 내가 바꿈 (원래 Claude 판정: \(original))")
+                        .font(.system(size: 12))
+                        .foregroundStyle(Color.qaSecondaryText)
+                    Button("되돌리기") { appModel.updateCause(id: result.id, cause: nil) }
+                        .buttonStyle(.link)
+                        .font(.system(size: 12))
+                } else {
+                    Text("Claude 판정: \(original)")
+                        .font(.system(size: 13, weight: .semibold))
+                }
+                Menu("판정 바로잡기") {
+                    ForEach(Cause.allCases, id: \.self) { cause in
+                        Button("\(cause.rawValue) — \(Self.causeSummary(cause))") {
+                            appModel.updateCause(id: result.id, cause: cause)
+                        }
+                        .disabled(cause == effective)
+                    }
+                }
+                .menuStyle(.button)
+                .fixedSize()
+                .help("녹화를 보고 Claude 판정이 틀렸을 때만 바꿔요")
+            }
+            Text(Self.causeSummary(effective))
+                .font(.system(size: 12))
+                .foregroundStyle(Color.qaTertiaryText)
+        }
+    }
+
+    private static func causeSummary(_ cause: Cause?) -> String {
+        switch cause {
+        case .appDefect: "앱 코드 버그 — 수정 요청 md로 넘길 대상"
+        case .toolMisjudgment: "앱은 맞게 동작했고 Artemis가 잘못 판단 — md에서 기본으로 빠져요"
+        case .environment: "네트워크·기기·계정처럼 앱 밖의 문제"
+        case nil: "원인을 아직 정하지 않았어요"
+        }
     }
 
     private var canRetry: Bool {
