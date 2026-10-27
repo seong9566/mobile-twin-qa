@@ -7,16 +7,28 @@ apps:
   android:
     package: com.hyeonseong.departureassistant   # app/android/app/build.gradle.kts:22
     launch: com.hyeonseong.departureassistant/.MainActivity   # app/android/app/src/main/AndroidManifest.xml:48
+    permissions:          # app/android/app/src/main/AndroidManifest.xml:8,23,37,38 (런타임 권한만)
+      - android.permission.POST_NOTIFICATIONS
+      - android.permission.RECORD_AUDIO
+      - android.permission.ACCESS_FINE_LOCATION
+      - android.permission.ACCESS_COARSE_LOCATION
   ios:
     bundle_id: com.stec.deptest   # ios/DepartureAssistant.xcodeproj/project.pbxproj:309 (네이티브 SwiftUI)
 
 build:
-  android: cd app && flutter build apk --dart-define-from-file=.env
+  android: cd app && flutter build apk --dart-define-from-file=$QA_APP_ENV
   android_apk: app/build/app/outputs/flutter-apk/app-release.apk
+  env_source: app/.env   # app/.env.example — NAVER_MAP_CLIENT_ID·API_BASE_URL
   ios: cd ios && xcodebuild build -scheme DepartureAssistant -destination 'platform=iOS Simulator,name=iPhone 17 Pro' -derivedDataPath .build/DerivedData CODE_SIGNING_ALLOWED=NO
 
 environments:
-  default: local      # server/run.sh --urls http://0.0.0.0:5199, 앱 .env의 API_BASE_URL
+  default: local
+  local:
+    health: http://{{mac_ip}}:5199/health   # server/DepartureAssistant.Api/Controllers/HealthController.cs:19
+    start: server/run.sh --urls http://0.0.0.0:5199   # README.md:36 (실기기가 닿도록 0.0.0.0), server/.env 필요
+    cwd: .
+    start_timeout: 180
+    vars: { API_BASE_URL: "http://{{mac_ip}}:5199" }   # app/lib/core/api/api_client.dart:145
 
 accounts: {}          # 계정 없음 — 기기 등록 방식
 
